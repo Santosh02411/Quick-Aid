@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Emergency Information - Quick Aid</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #ff4757; color: white; min-height: 100vh; }
+        .container { max-width: 800px; margin: 0 auto; padding: 20px; }
+        .header { text-align: center; margin-bottom: 30px; }
+        .emergency-card { background: rgba(255,255,255,0.1); border-radius: 15px; padding: 30px; margin-bottom: 20px; backdrop-filter: blur(10px); }
+        .emergency-number { font-size: 4em; font-weight: bold; text-align: center; margin: 20px 0; }
+        .emergency-list { list-style: none; }
+        .emergency-list li { padding: 10px; margin: 10px 0; background: rgba(255,255,255,0.2); border-radius: 10px; }
+        .btn-back { background: white; color: #ff4757; border: none; padding: 12px 25px; border-radius: 25px; cursor: pointer; font-size: 16px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🚨 EMERGENCY INFORMATION</h1>
+        </div>
+        
+        <div class="emergency-card">
+            <h2>Emergency Services</h2>
+            <div class="emergency-number">911</div>
+            <p style="text-align: center; font-size: 1.2em;">For life-threatening emergencies</p>
+        </div>
+        
+        <div class="emergency-card">
+            <h2>When to Call 911</h2>
+            <ul class="emergency-list">
+                <li>🫀 Chest pain or heart attack symptoms</li>
+                <li>🫁 Severe difficulty breathing</li>
+                <li>🧠 Signs of stroke (face drooping, arm weakness, speech difficulty)</li>
+                <li>🩸 Severe bleeding that won't stop</li>
+                <li>🤕 Loss of consciousness</li>
+                <li>🔥 Severe burns</li>
+                <li>💊 Poisoning or overdose</li>
+                <li>🦴 Suspected broken bones</li>
+            </ul>
+        </div>
+        
+        <div class="emergency-card">
+            <h2>Basic First Aid Steps</h2>
+            <ul class="emergency-list">
+                <li>1️⃣ Ensure scene safety</li>
+                <li>2️⃣ Check for responsiveness</li>
+                <li>3️⃣ Call for help if needed</li>
+                <li>4️⃣ Provide appropriate care</li>
+                <li>5️⃣ Monitor until help arrives</li>
+            </ul>
+        </div>
+        
+        <div style="text-align: center; margin-top: 30px;">
+            <button class="btn-back" onclick="window.close()">← Back to Quick Aid</button>
+        </div>
+    </div>
+</body>
+</html>

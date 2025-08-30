@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quick Aid - Medical Assistant</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100vh; }
+        .container { max-width: 1200px; margin: 0 auto; padding: 20px; }
+        .header { text-align: center; color: white; margin-bottom: 30px; }
+        .header h1 { font-size: 3em; margin-bottom: 10px; }
+        .disclaimer { background: #ff6b6b; color: white; padding: 15px; border-radius: 10px; margin-bottom: 30px; text-align: center; font-weight: bold; }
+        .main-content { display: grid; grid-template-columns: 1fr 1fr; gap: 30px; }
+        .card { background: white; border-radius: 15px; padding: 30px; box-shadow: 0 10px 30px rgba(0,0,0,0.2); }
+        .card h2 { color: #333; margin-bottom: 20px; font-size: 1.5em; }
+        .upload-area { border: 3px dashed #ddd; border-radius: 10px; padding: 40px; text-align: center; cursor: pointer; transition: all 0.3s; }
+        .upload-area:hover { border-color: #667eea; background: #f8f9ff; }
+        .upload-area.dragover { border-color: #667eea; background: #e8f0ff; }
+        input[type="file"] { display: none; }
+        .btn { background: #667eea; color: white; border: none; padding: 12px 25px; border-radius: 25px; cursor: pointer; font-size: 16px; transition: all 0.3s; }
+        .btn:hover { background: #5a6fd8; transform: translateY(-2px); }
+        .btn-emergency { background: #ff4757; }
+        .btn-emergency:hover { background: #ff3838; }
+        textarea { width: 100%; padding: 15px; border: 2px solid #ddd; border-radius: 10px; font-size: 16px; min-height: 120px; resize: vertical; }
+        .results { margin-top: 20px; padding: 20px; background: #f8f9fa; border-radius: 10px; display: none; }
+        .loading { text-align: center; padding: 20px; display: none; }
+        .spinner { border: 4px solid #f3f3f3; border-top: 4px solid #667eea; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; margin: 0 auto; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        .recommendation { background: #e8f5e8; border-left: 4px solid #28a745; padding: 10px; margin: 10px 0; border-radius: 5px; }
+        .emergency { background: #ffe6e6; border-left: 4px solid #dc3545; }
+        .condition { background: #fff3cd; border-left: 4px solid #ffc107; padding: 10px; margin: 5px 0; border-radius: 5px; }
+        @media (max-width: 768px) { .main-content { grid-template-columns: 1fr; } }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🏥 Quick Aid</h1>
+            <p>AI-Powered Medical Assistant for Injury Detection & Health Analysis</p>
+        </div>
+        
+        <div class="disclaimer">
+            ⚠️ MEDICAL DISCLAIMER: This tool is for educational purposes only. Always consult healthcare professionals for medical advice. In case of emergency, call 911 immediately.
+        </div>
+        
+        <div class="main-content">
+            <div class="card">
+                <h2>📸 Image Analysis</h2>
+                <p>Upload an image of an injury or skin condition for AI analysis</p>
+                <div class="upload-area" id="uploadArea">
+                    <div id="uploadContent">
+                        <p>📁 Click to upload or drag & drop image</p>
+                        <p style="font-size: 14px; color: #666; margin-top: 10px;">Supported: JPG, PNG, GIF (Max 16MB)</p>
+                    </div>
+                    <input type="file" id="imageInput" accept="image/*">
+                </div>
+                <button class="btn" id="analyzeBtn" style="margin-top: 15px; display: none;">Analyze Image</button>
+                <div class="loading" id="imageLoading">
+                    <div class="spinner"></div>
+                    <p>Analyzing image...</p>
+                </div>
+                <div class="results" id="imageResults"></div>
+            </div>
+            
+            <div class="card">
+                <h2>🤒 Symptom Checker</h2>
+                <p>Describe your symptoms for AI-powered health analysis</p>
+                <textarea id="symptomsInput" placeholder="Describe your symptoms in detail... (e.g., 'I have a headache, fever, and sore throat for 2 days')"></textarea>
+                <button class="btn" id="checkSymptomsBtn" style="margin-top: 15px;">Analyze Symptoms</button>
+                <div class="loading" id="symptomLoading">
+                    <div class="spinner"></div>
+                    <p>Analyzing symptoms...</p>
+                </div>
+                <div class="results" id="symptomResults"></div>
+            </div>
+        </div>
+        
+        <div style="text-align: center; margin-top: 30px;">
+            <button class="btn btn-emergency" onclick="window.open('/emergency', '_blank')">🚨 Emergency Information</button>
+        </div>
+        
+        <footer style="text-align: center; margin-top: 40px; padding: 20px; background: rgba(255,255,255,0.1); border-radius: 10px; color: white;">
+            <h4 style="margin-bottom: 10px;">👨‍💻 Developer Information</h4>
+            <p style="margin: 5px 0;"><strong>Developed by:</strong> Santosh</p>
+            <p style="margin: 5px 0;"><strong>Email:</strong> <a href="mailto:santosh@example.com" style="color: #fff; text-decoration: underline;">santosh@example.com</a></p>
+            <p style="margin: 5px 0;"><strong>GitHub:</strong> <a href="https://github.com/Santosh02411" target="_blank" style="color: #fff; text-decoration: underline;">github.com/Santosh02411</a></p>
+            <p style="margin: 5px 0;"><strong>LinkedIn:</strong> <a href="https://linkedin.com/in/santosh" target="_blank" style="color: #fff; text-decoration: underline;">linkedin.com/in/santosh</a></p>
+        </footer>
+    </div>
+    
+    <script>
+        const uploadArea = document.getElementById('uploadArea');
+        const imageInput = document.getElementById('imageInput');
+        const analyzeBtn = document.getElementById('analyzeBtn');
+        const imageLoading = document.getElementById('imageLoading');
+        const imageResults = document.getElementById('imageResults');
+        const symptomsInput = document.getElementById('symptomsInput');
+        const checkSymptomsBtn = document.getElementById('checkSymptomsBtn');
+        const symptomLoading = document.getElementById('symptomLoading');
+        const symptomResults = document.getElementById('symptomResults');
+        
+        let selectedFile = null;
+        
+        // Image upload handling
+        uploadArea.addEventListener('click', () => imageInput.click());
+        uploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadArea.classList.add('dragover');
+        });
+        uploadArea.addEventListener('dragleave', () => uploadArea.classList.remove('dragover'));
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadArea.classList.remove('dragover');
+            const files = e.dataTransfer.files;
+            if (files.length > 0) handleFileSelect(files[0]);
+        });
+        
+        imageInput.addEventListener('change', (e) => {
+            if (e.target.files.length > 0) handleFileSelect(e.target.files[0]);
+        });
+        
+        function handleFileSelect(file) {
+            selectedFile = file;
+            document.getElementById('uploadContent').innerHTML = `<p>✅ Selected: ${file.name}</p>`;
+            analyzeBtn.style.display = 'block';
+        }
+        
+        analyzeBtn.addEventListener('click', analyzeImage);
+        
+        async function analyzeImage() {
+            if (!selectedFile) return;
+            
+            const formData = new FormData();
+            formData.append('file', selectedFile);
+            
+            imageLoading.style.display = 'block';
+            imageResults.style.display = 'none';
+            
+            try {
+                const response = await fetch('/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const result = await response.json();
+                displayImageResults(result);
+            } catch (error) {
+                displayImageResults({error: 'Network error occurred'});
+            }
+            
+            imageLoading.style.display = 'none';
+        }
+        
+        function displayImageResults(result) {
+            let html = '';
+            
+            if (result.error) {
+                html = `<div class="emergency"><strong>Error:</strong> ${result.error}</div>`;
+            } else {
+                html += `<h3>Analysis Results</h3>`;
+                
+                if (result.analysis.detected_conditions) {
+                    html += `<h4>Detected Conditions:</h4>`;
+                    result.analysis.detected_conditions.forEach(condition => {
+                        html += `<div class="condition">${condition}</div>`;
+                    });
+                }
+                
+                if (result.analysis.recommendations) {
+                    html += `<h4>Recommendations:</h4>`;
+                    result.analysis.recommendations.forEach(rec => {
+                        html += `<div class="recommendation">${rec}</div>`;
+                    });
+                }
+                
+                if (result.analysis.safety_tips) {
+                    html += `<h4>Safety Tips:</h4>`;
+                    result.analysis.safety_tips.forEach(tip => {
+                        html += `<div class="recommendation">${tip}</div>`;
+                    });
+                }
+                
+                html += `<div style="margin-top: 15px; font-size: 12px; color: #666;">${result.analysis.disclaimer}</div>`;
+            }
+            
+            imageResults.innerHTML = html;
+            imageResults.style.display = 'block';
+        }
+        
+        // Symptom analysis
+        checkSymptomsBtn.addEventListener('click', analyzeSymptoms);
+        
+        async function analyzeSymptoms() {
+            const symptoms = symptomsInput.value.trim();
+            if (!symptoms) {
+                alert('Please describe your symptoms');
+                return;
+            }
+            
+            symptomLoading.style.display = 'block';
+            symptomResults.style.display = 'none';
+            
+            try {
+                const response = await fetch('/analyze_symptoms', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({symptoms: symptoms})
+                });
+                
+                const result = await response.json();
+                displaySymptomResults(result);
+            } catch (error) {
+                displaySymptomResults({error: 'Network error occurred'});
+            }
+            
+            symptomLoading.style.display = 'none';
+        }
+        
+        function displaySymptomResults(result) {
+            let html = '';
+            
+            if (result.error) {
+                html = `<div class="emergency"><strong>Error:</strong> ${result.error}</div>`;
+            } else {
+                const analysis = result.analysis;
+                
+                if (analysis.emergency_alert && analysis.emergency_alert.alert) {
+                    html += `<div class="emergency"><strong>${analysis.emergency_alert.message}</strong><br>${analysis.emergency_alert.action}</div>`;
+                }
+                
+                html += `<h3>Symptom Analysis</h3>`;
+                
+                if (analysis.detected_symptoms) {
+                    html += `<h4>Detected Symptoms:</h4>`;
+                    analysis.detected_symptoms.forEach(symptom => {
+                        const symptomText = typeof symptom === 'string' ? symptom : (symptom.name || symptom.toString());
+                        html += `<div class="condition">${symptomText.replace('_', ' ')}</div>`;
+                    });
+                }
+                
+                if (analysis.possible_conditions) {
+                    html += `<h4>Possible Conditions:</h4>`;
+                    analysis.possible_conditions.forEach(condition => {
+                        const conditionText = typeof condition === 'string' ? condition : (condition.name || condition.toString());
+                        html += `<div class="condition">${conditionText}</div>`;
+                    });
+                }
+                
+                if (analysis.recommendations) {
+                    html += `<h4>Recommendations:</h4>`;
+                    analysis.recommendations.forEach(rec => {
+                        const className = rec.includes('🚨') ? 'emergency' : 'recommendation';
+                        html += `<div class="${className}">${rec}</div>`;
+                    });
+                }
+                
+                html += `<div style="margin-top: 15px; font-size: 12px; color: #666;">${analysis.disclaimer}</div>`;
+            }
+            
+            symptomResults.innerHTML = html;
+            symptomResults.style.display = 'block';
+        }
+    </script>
+</body>
+</html>
