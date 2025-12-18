@@ -106,37 +106,48 @@ class MedicalAnalyzer:
 
     def _analyze_with_gemini(self, image_path: str) -> Dict:
         """Use Gemini AI for accurate medical image analysis"""
-        image = Image.open(image_path)
-        
-        prompt = """
-        You are a medical AI assistant. Analyze this medical image carefully and provide:
-
-        1. DETECTED CONDITIONS: List specific conditions, injuries, or abnormalities you can identify
-        2. CONFIDENCE LEVEL: Rate your confidence (low/medium/high) 
-        3. DETAILED RECOMMENDATIONS: Specific medical advice and treatment steps
-        4. URGENCY: Classify as low/medium/high urgency
-        5. SAFETY TIPS: Relevant safety and care instructions
-
-        Be specific and accurate. If you cannot identify anything definitive, say so clearly.
-        Focus on visible symptoms like:
-        - Cuts, wounds, lacerations
-        - Burns (1st, 2nd, 3rd degree)
-        - Bruises, contusions
-        - Rashes, skin conditions
-        - Swelling, inflammation
-        - Infections, discoloration
-
-        Format as JSON with keys: detected_conditions, confidence, recommendations, urgency, safety_tips
-        """
-
         try:
-            response = self.model.generate_content([prompt, image])
-            
-            # Parse Gemini response
-            analysis_text = response.text
-            
-            # Extract structured data from response
-            return self._parse_gemini_response(analysis_text)
+            with Image.open(image_path) as image:
+                # Determine if the image is likely an X-ray (grayscale-like)
+                img_rgb = image.convert('RGB')
+                arr = np.array(img_rgb)
+                channel_std = np.std(arr, axis=(0, 1))
+                is_grayscale_like = float(np.mean(channel_std)) < 5.0
+
+                if is_grayscale_like:
+                    prompt = """
+                    You are a medical AI assistant specializing in radiography. Analyze this X-ray image and provide a concise, clinically relevant assessment focused on bone and joint findings.
+
+                    Return STRICT JSON ONLY with these keys:
+                    - detected_conditions: string[] (e.g., "distal radius fracture", "metacarpal fracture", "no acute fracture detected")
+                    - confidence: "low" | "medium" | "high"
+                    - recommendations: string[] (specific next steps: immobilization, urgent orthopedic consult, CT/MRI suggestions, follow-up timing)
+                    - urgency: "low" | "medium" | "high"
+                    - safety_tips: string[] (short, relevant care instructions)
+
+                    Consider: fracture lines, cortical discontinuity, displacement/angulation, joint alignment, visible hardware, soft-tissue swelling.
+                    If no clear fracture is seen, state that explicitly and suggest appropriate next steps.
+                    """
+                else:
+                    prompt = """
+                    You are a medical AI assistant. Analyze this clinical image and provide:
+                    - detected_conditions: string[] (specific conditions or abnormalities)
+                    - confidence: "low" | "medium" | "high"
+                    - recommendations: string[] (specific treatment/care steps)
+                    - urgency: "low" | "medium" | "high"
+                    - safety_tips: string[]
+
+                    Focus on visible features such as wounds, burns, bruises, rashes, swelling, or infection. Be specific. If uncertain, state uncertainty clearly.
+                    Return STRICT JSON ONLY with exactly those keys and no extra text.
+                    """
+
+                response = self.model.generate_content([prompt, img_rgb])
+                
+                # Parse Gemini response
+                analysis_text = response.text
+                
+                # Extract structured data from response
+                return self._parse_gemini_response(analysis_text)
             
         except Exception as e:
             return self._analyze_basic(image_path)
@@ -190,8 +201,8 @@ class MedicalAnalyzer:
 
     def _analyze_basic(self, image_path: str) -> Dict:
         """Fallback basic analysis when Gemini is not available"""
-        image = Image.open(image_path)
-        image_rgb = np.array(image.convert('RGB'))
+        with Image.open(image_path) as image:
+            image_rgb = np.array(image.convert('RGB'))
         
         analysis_result = self._analyze_visual_features(image_rgb)
         recommendations = self._generate_recommendations(analysis_result)

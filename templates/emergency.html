@@ -4,16 +4,32 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Emergency Information - Quick Aid</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #ff4757; color: white; min-height: 100vh; }
-        .container { max-width: 800px; margin: 0 auto; padding: 20px; }
-        .header { text-align: center; margin-bottom: 30px; }
-        .emergency-card { background: rgba(255,255,255,0.1); border-radius: 15px; padding: 30px; margin-bottom: 20px; backdrop-filter: blur(10px); }
-        .emergency-number { font-size: 4em; font-weight: bold; text-align: center; margin: 20px 0; }
+        :root {
+            --bg1: #ef4444;
+            --bg2: #f97316;
+            --text: #0f172a;
+            --card: rgba(255,255,255,0.9);
+            --card-border: rgba(255,255,255,0.5);
+        }
+        body {
+            font-family: 'Inter', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: radial-gradient(1200px 800px at 90% 10%, rgba(255,255,255,0.12), transparent 40%),
+                        linear-gradient(135deg, var(--bg1) 0%, var(--bg2) 100%);
+            color: #fff;
+            min-height: 100vh;
+        }
+        .container { max-width: 900px; margin: 0 auto; padding: 28px; }
+        .header { text-align: center; margin-bottom: 26px; }
+        .header h1 { font-size: 2.4em; letter-spacing: 0.3px; }
+        .emergency-card { background: rgba(255,255,255,0.15); border: 1px solid var(--card-border); border-radius: 16px; padding: 24px; margin-bottom: 18px; backdrop-filter: blur(8px); box-shadow: 0 10px 30px rgba(2,6,23,0.25); }
+        .emergency-number { font-size: 3.4em; font-weight: 800; text-align: center; margin: 18px 0; }
         .emergency-list { list-style: none; }
-        .emergency-list li { padding: 10px; margin: 10px 0; background: rgba(255,255,255,0.2); border-radius: 10px; }
-        .btn-back { background: white; color: #ff4757; border: none; padding: 12px 25px; border-radius: 25px; cursor: pointer; font-size: 16px; }
+        .emergency-list li { padding: 12px 14px; margin: 10px 0; background: rgba(255,255,255,0.18); border-radius: 12px; }
+        .btn-back { background: linear-gradient(135deg, #ffffff, #eef2ff); color: #b91c1c; border: none; padding: 12px 22px; border-radius: 12px; cursor: pointer; font-size: 15px; box-shadow: 0 8px 20px rgba(255,255,255,0.25); transition: transform 0.15s ease, filter 0.15s ease; }
+        .btn-back:hover { transform: translateY(-1px); filter: brightness(1.03); }
     </style>
 </head>
 <body>
