@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-   <meta charset="UTF-8">
+    <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Quick Aid - Medical Assistant</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
@@ -80,10 +80,26 @@
                         <p style="font-size: 14px; color: #666; margin-top: 10px;">Supported: JPG, PNG, GIF (Max 16MB)</p>
                     </div>
                     <input type="file" id="imageInput" accept="image/*">
-              
+                </div>
+                <button class="btn" id="analyzeBtn" style="margin-top: 15px; display: none;">Analyze Image</button>
+                <div class="loading" id="imageLoading">
+                    <div class="spinner"></div>
+                    <p>Analyzing image...</p>
+                </div>
+                <div class="results" id="imageResults"></div>
             </div>
             
-            
+            <div class="card">
+                <h2>🤒 Symptom Checker</h2>
+                <p>Describe your symptoms for AI-powered health analysis</p>
+                <textarea id="symptomsInput" placeholder="Describe your symptoms in detail... (e.g., 'I have a headache, fever, and sore throat for 2 days')"></textarea>
+                <button class="btn" id="checkSymptomsBtn" style="margin-top: 15px;">Analyze Symptoms</button>
+                <div class="loading" id="symptomLoading">
+                    <div class="spinner"></div>
+                    <p>Analyzing symptoms...</p>
+                </div>
+                <div class="results" id="symptomResults"></div>
+            </div>
         </div>
         
         <div style="text-align: center; margin-top: 30px;">
