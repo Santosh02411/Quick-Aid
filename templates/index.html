@@ -12,26 +12,7 @@
         
         function displaySymptomResults(result) {
             let html = '';
-            
-            if (result.error) {
-                html = `<div class="emergency"><strong>Error:</strong> ${result.error}</div>`;
-            } else {
-                const analysis = result.analysis;
-                
-                if (analysis.emergency_alert && analysis.emergency_alert.alert) {
-                    html += `<div class="emergency"><strong>${analysis.emergency_alert.message}</strong><br>${analysis.emergency_alert.action}</div>`;
-                }
-                
-                html += `<h3>Symptom Analysis</h3>`;
-                
-                if (analysis.detected_symptoms) {
-                    html += `<h4>Detected Symptoms:</h4>`;
-                    analysis.detected_symptoms.forEach(symptom => {
-                        const symptomText = typeof symptom === 'string' ? symptom : (symptom.name || symptom.toString());
-                        html += `<div class="condition">${symptomText.replace('_', ' ')}</div>`;
-                    });
-                }
-                
+           
                 if (analysis.possible_conditions) {
                     html += `<h4>Possible Conditions:</h4>`;
                     analysis.possible_conditions.forEach(condition => {
