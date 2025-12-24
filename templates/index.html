@@ -8,19 +8,7 @@
     <style>
 
     
-        // Symptom analysis
-        checkSymptomsBtn.addEventListener('click', analyzeSymptoms);
-        
-        async function analyzeSymptoms() {
-            const symptoms = symptomsInput.value.trim();
-            if (!symptoms) {
-                alert('Please describe your symptoms');
-                return;
-            }
-            
-            symptomLoading.style.display = 'block';
-            symptomResults.style.display = 'none';
-            
+     
             try {
                 const response = await fetch('/analyze_symptoms', {
                     method: 'POST',
