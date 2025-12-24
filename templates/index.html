@@ -7,17 +7,6 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
     <style>
       
-        
-        imageInput.addEventListener('change', (e) => {
-            if (e.target.files.length > 0) handleFileSelect(e.target.files[0]);
-        });
-        
-        function handleFileSelect(file) {
-            selectedFile = file;
-            document.getElementById('uploadContent').innerHTML = `<p>✅ Selected: ${file.name}</p>`;
-            analyzeBtn.style.display = 'block';
-        }
-        
         analyzeBtn.addEventListener('click', analyzeImage);
         
         async function analyzeImage() {
