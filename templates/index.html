@@ -8,22 +8,8 @@
     <style>
       
             
+
         
-        function displayImageResults(result) {
-            let html = '';
-            
-            if (result.error) {
-                html = `<div class="emergency"><strong>Error:</strong> ${result.error}</div>`;
-            } else {
-                html += `<h3>Analysis Results</h3>`;
-                
-                if (result.analysis.detected_conditions) {
-                    html += `<h4>Detected Conditions:</h4>`;
-                    result.analysis.detected_conditions.forEach(condition => {
-                        html += `<div class="condition">${condition}</div>`;
-                    });
-                }
-                
                 if (result.analysis.recommendations) {
                     html += `<h4>Recommendations:</h4>`;
                     result.analysis.recommendations.forEach(rec => {
