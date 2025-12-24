@@ -7,20 +7,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
     <style>
       
-            try {
-                const response = await fetch('/upload', {
-                    method: 'POST',
-                    body: formData
-                });
-                
-                const result = await response.json();
-                displayImageResults(result);
-            } catch (error) {
-                displayImageResults({error: 'Network error occurred'});
-            }
             
-            imageLoading.style.display = 'none';
-        }
         
         function displayImageResults(result) {
             let html = '';
