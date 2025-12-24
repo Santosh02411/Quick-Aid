@@ -7,17 +7,6 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
     <style>
       
-        analyzeBtn.addEventListener('click', analyzeImage);
-        
-        async function analyzeImage() {
-            if (!selectedFile) return;
-            
-            const formData = new FormData();
-            formData.append('file', selectedFile);
-            
-            imageLoading.style.display = 'block';
-            imageResults.style.display = 'none';
-            
             try {
                 const response = await fetch('/upload', {
                     method: 'POST',
