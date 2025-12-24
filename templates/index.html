@@ -8,26 +8,5 @@
     <style>
 
     
-    
-        
-        function displaySymptomResults(result) {
-            let html = '';
-           
-                if (analysis.possible_conditions) {
-                    html += `<h4>Possible Conditions:</h4>`;
-                    analysis.possible_conditions.forEach(condition => {
-                        const conditionText = typeof condition === 'string' ? condition : (condition.name || condition.toString());
-                        html += `<div class="condition">${conditionText}</div>`;
-                    });
-                }
-                
-                if (analysis.recommendations) {
-                    html += `<h4>Recommendations:</h4>`;
-                    analysis.recommendations.forEach(rec => {
-                        const className = rec.includes('🚨') ? 'emergency' : 'recommendation';
-                        html += `<div class="${className}">${rec}</div>`;
-                    });
-                }
-    </script>
 </body>
 </html>
