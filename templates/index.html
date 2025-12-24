@@ -7,21 +7,6 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
     <style>
       
-       
-        
-        
-
-    
-    <script>
-        let selectedFile = null;
-      
-        uploadArea.addEventListener('dragleave', () => uploadArea.classList.remove('dragover'));
-        uploadArea.addEventListener('drop', (e) => {
-            e.preventDefault();
-            uploadArea.classList.remove('dragover');
-            const files = e.dataTransfer.files;
-            if (files.length > 0) handleFileSelect(files[0]);
-        });
         
         imageInput.addEventListener('change', (e) => {
             if (e.target.files.length > 0) handleFileSelect(e.target.files[0]);
