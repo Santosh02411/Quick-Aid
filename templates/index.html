@@ -7,21 +7,8 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
     <style>
       
-            
 
         
-                if (result.analysis.recommendations) {
-                    html += `<h4>Recommendations:</h4>`;
-                    result.analysis.recommendations.forEach(rec => {
-                        html += `<div class="recommendation">${rec}</div>`;
-                    });
-                }
-                
-                if (result.analysis.safety_tips) {
-                    html += `<h4>Safety Tips:</h4>`;
-                    result.analysis.safety_tips.forEach(tip => {
-                        html += `<div class="recommendation">${tip}</div>`;
-                    });
                 }
                 
                 html += `<div style="margin-top: 15px; font-size: 12px; color: #666;">${result.analysis.disclaimer}</div>`;
