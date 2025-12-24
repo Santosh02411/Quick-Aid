@@ -127,13 +127,7 @@
         const symptomResults = document.getElementById('symptomResults');
         
         let selectedFile = null;
-        
-        // Image upload handling
-        uploadArea.addEventListener('click', () => imageInput.click());
-        uploadArea.addEventListener('dragover', (e) => {
-            e.preventDefault();
-            uploadArea.classList.add('dragover');
-        });
+      
         uploadArea.addEventListener('dragleave', () => uploadArea.classList.remove('dragover'));
         uploadArea.addEventListener('drop', (e) => {
             e.preventDefault();
