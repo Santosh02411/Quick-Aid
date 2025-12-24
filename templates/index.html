@@ -8,22 +8,7 @@
     <style>
 
     
-     
-            try {
-                const response = await fetch('/analyze_symptoms', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({symptoms: symptoms})
-                });
-                
-                const result = await response.json();
-                displaySymptomResults(result);
-            } catch (error) {
-                displaySymptomResults({error: 'Network error occurred'});
-            }
-            
-            symptomLoading.style.display = 'none';
-        }
+    
         
         function displaySymptomResults(result) {
             let html = '';
