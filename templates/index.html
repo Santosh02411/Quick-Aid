@@ -333,6 +333,31 @@
         .btn-emergency:hover {
             box-shadow: 0 20px 40px rgba(239, 68, 68, 0.5);
         }
+ textarea {
+            width: 100%;
+            padding: 20px;
+            border: 2px solid rgba(255, 255, 255, 0.2);
+            border-radius: 20px;
+            font-size: 1rem;
+            min-height: 160px;
+            resize: vertical;
+            background: rgba(255, 255, 255, 0.15);
+            backdrop-filter: blur(10px);
+            color: white;
+            outline: none;
+            transition: all 0.3s ease;
+        }
+
+        textarea::placeholder {
+            color: rgba(255, 255, 255, 0.7);
+        }
+
+        textarea:focus {
+            border-color: var(--primary);
+            box-shadow: 0 0 0 4px rgba(14, 165, 233, 0.2);
+            background: rgba(255, 255, 255, 0.2);
+        }
+
 
 
 </html>
