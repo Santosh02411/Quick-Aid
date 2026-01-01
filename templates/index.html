@@ -562,6 +562,23 @@
                     <div class="results" id="imageResults"></div>
                 </div>
 
+                <div class="card" data-aos="fade-up" data-aos-delay="300" data-aos-duration="800">
+                    <i class="fas fa-stethoscope card-icon"></i>
+                    <h2>🤒 Symptom Checker</h2>
+                    <p>Describe your symptoms in detail for comprehensive AI health analysis and recommendations</p>
+                    <textarea id="symptomsInput" placeholder="Describe your symptoms... (e.g., 'Headache for 2 days, fever 101°F, sore throat, fatigue')"></textarea>
+                    <button class="btn" id="checkSymptomsBtn" style="margin-top: 20px; width: 100%;">
+                        <i class="fas fa-brain"></i> Analyze Symptoms
+                    </button>
+                    <div class="loading" id="symptomLoading">
+                        <div class="spinner"></div>
+                        <p>🧠 Processing your symptoms...</p>
+                    </div>
+                    <div class="results" id="symptomResults"></div>
+                </div>
+            </div>
+
+
 
 
 </html>
