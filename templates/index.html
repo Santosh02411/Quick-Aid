@@ -669,6 +669,39 @@
         imageInput.addEventListener('change', (e) => {
             if (e.target.files.length > 0) handleFileSelect(e.target.files[0]);
         });
+function handleFileSelect(file) {
+            selectedFile = file;
+            document.getElementById('uploadContent').innerHTML = `
+                <i class="fas fa-check-circle" style="font-size: 3rem; color: var(--success); margin-bottom: 15px;"></i>
+                <p>✅ <strong>${file.name}</strong></p>
+                <p style="font-size: 0.9rem; color: rgba(255,255,255,0.8);">${(file.size / 1024 / 1024).toFixed(2)} MB</p>
+            `;
+            analyzeBtn.style.display = 'block';
+        }
+
+        analyzeBtn.addEventListener('click', analyzeImage);
+
+        async function analyzeImage() {
+            if (!selectedFile) return;
+
+            const formData = new FormData();
+            formData.append('file', selectedFile);
+
+            imageLoading.style.display = 'block';
+            imageResults.style.display = 'none';
+            analyzeBtn.style.display = 'none';
+
+            try {
+                const response = await fetch('/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const result = await response.json();
+                displayImageResults(result);
+            } catch (error) {
+                displayImageResults({error: 'Network error occurred. Please try again.'});
+            }
 
 
 
