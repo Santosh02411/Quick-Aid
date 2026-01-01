@@ -525,6 +525,43 @@
             </ul>
         </div>
     </nav>
+    <div class="container">
+        <div class="main-content">
+            <!-- Hero Section -->
+            <div class="hero" data-aos="fade-down" data-aos-duration="1200">
+                <h1>Quick Aid</h1>
+                <p>AI-Powered Medical Assistant for Instant Injury Detection & Comprehensive Health Analysis</p>
+            </div>
+
+            <!-- Disclaimer -->
+            <div class="disclaimer" data-aos="zoom-in" data-aos-delay="200">
+                ⚠️ <strong>MEDICAL DISCLAIMER:</strong> This tool is for educational purposes only. Always consult healthcare professionals for medical advice. In emergencies, call 108 immediately.
+            </div>
+
+            <!-- Cards Grid -->
+            <div class="cards-grid">
+                <div class="card" data-aos="fade-up" data-aos-delay="100" data-aos-duration="800">
+                    <i class="fas fa-camera-medical card-icon"></i>
+                    <h2>📸 Image Analysis</h2>
+                    <p>Upload injury photos or skin conditions for instant AI-powered diagnosis and treatment recommendations</p>
+                    <div class="upload-area" id="uploadArea">
+                        <div id="uploadContent">
+                            <i class="fas fa-cloud-upload-alt" style="font-size: 3rem; color: rgba(255,255,255,0.6); margin-bottom: 15px;"></i>
+                            <p>Click to upload or drag & drop image</p>
+                            <p style="font-size: 0.95rem; color: rgba(255,255,255,0.8);">Supported: JPG, PNG, GIF (Max 16MB)</p>
+                        </div>
+                        <input type="file" id="imageInput" accept="image/*">
+                    </div>
+                    <button class="btn" id="analyzeBtn" style="margin-top: 20px; display: none; width: 100%;">
+                        <i class="fas fa-search"></i> Analyze Image
+                    </button>
+                    <div class="loading" id="imageLoading">
+                        <div class="spinner"></div>
+                        <p>🔬 AI is analyzing your image...</p>
+                    </div>
+                    <div class="results" id="imageResults"></div>
+                </div>
+
 
 
 </html>
