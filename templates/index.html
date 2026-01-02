@@ -783,6 +783,16 @@ function handleFileSelect(file) {
                     html += `<div class="emergency" style="font-size: 1.1rem;"><i class="fas fa-exclamation-triangle"></i> <strong>🚨 EMERGENCY ALERT</strong><br>${analysis.emergency_alert.message}<br><strong>Action:</strong> ${analysis.emergency_alert.action}</div>`;
                 }
 
+ html += `<h3 style="color: white; margin-bottom: 20px;"><i class="fas fa-diagnoses"></i> Symptom Analysis Complete</h3>`;
+
+                if (analysis.detected_symptoms) {
+                    html += `<h4 style="color: white; margin-bottom: 15px;"><i class="fas fa-list"></i> Detected Symptoms:</h4>`;
+                    analysis.detected_symptoms.forEach(symptom => {
+                        const symptomText = typeof symptom === 'string' ? symptom : (symptom.name || symptom.toString());
+                        html += `<div class="condition"><i class="fas fa-info-circle"></i> ${symptomText.replace('_', ' ')}</div>`;
+                    });
+                }
+
 
 
 
