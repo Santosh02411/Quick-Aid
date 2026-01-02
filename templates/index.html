@@ -741,6 +741,16 @@ function handleFileSelect(file) {
             imageResults.innerHTML = html;
             imageResults.style.display = 'block';
         }
+ // Symptom analysis
+        checkSymptomsBtn.addEventListener('click', analyzeSymptoms);
+
+        async function analyzeSymptoms() {
+            const symptoms = symptomsInput.value.trim();
+            if (!symptoms) {
+                alert('Please describe your symptoms first');
+                return;
+            }
+
 
 
 
