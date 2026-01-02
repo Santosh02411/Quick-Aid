@@ -722,6 +722,12 @@ function handleFileSelect(file) {
                         html += `<div class="condition"><i class="fas fa-info-circle"></i> ${condition}</div>`;
                     });
                 }
+ if (result.analysis.recommendations) {
+                    html += `<h4 style="color: white; margin-bottom: 15px;"><i class="fas fa-lightbulb"></i> Recommendations:</h4>`;
+                    result.analysis.recommendations.forEach(rec => {
+                        html += `<div class="recommendation"><i class="fas fa-check-circle"></i> ${rec}</div>`;
+                    });
+                }
 
 
 
