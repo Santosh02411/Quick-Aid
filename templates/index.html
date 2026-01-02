@@ -771,6 +771,17 @@ function handleFileSelect(file) {
             checkSymptomsBtn.style.display = 'block';
         }
 
+ function displaySymptomResults(result) {
+            let html = '';
+
+            if (result.error) {
+                html = `<div class="emergency"><i class="fas fa-exclamation-triangle"></i> <strong>Error:</strong> ${result.error}</div>`;
+            } else {
+                const analysis = result.analysis;
+
+                if (analysis.emergency_alert && analysis.emergency_alert.alert) {
+                    html += `<div class="emergency" style="font-size: 1.1rem;"><i class="fas fa-exclamation-triangle"></i> <strong>🚨 EMERGENCY ALERT</strong><br>${analysis.emergency_alert.message}<br><strong>Action:</strong> ${analysis.emergency_alert.action}</div>`;
+                }
 
 
 
