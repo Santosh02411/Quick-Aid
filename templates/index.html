@@ -728,6 +728,12 @@ function handleFileSelect(file) {
                         html += `<div class="recommendation"><i class="fas fa-check-circle"></i> ${rec}</div>`;
                     });
                 }
+ if (result.analysis.safety_tips) {
+                    html += `<h4 style="color: white; margin-bottom: 15px;"><i class="fas fa-shield-alt"></i> Safety Tips:</h4>`;
+                    result.analysis.safety_tips.forEach(tip => {
+                        html += `<div class="recommendation"><i class="fas fa-exclamation-circle"></i> ${tip}</div>`;
+                    });
+                }
 
 
 
