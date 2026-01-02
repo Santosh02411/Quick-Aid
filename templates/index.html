@@ -809,6 +809,13 @@ function handleFileSelect(file) {
                     });
                 }
 
+  html += `<div style="margin-top: 25px; padding: 15px; background: rgba(255,255,255,0.1); border-radius: 12px; font-size: 0.9rem; color: rgba(255,255,255,0.8);">${analysis.disclaimer}</div>`;
+            }
+
+            symptomResults.innerHTML = html;
+            symptomResults.style.display = 'block';
+        }
+
 
 
 
