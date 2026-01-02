@@ -735,6 +735,12 @@ function handleFileSelect(file) {
                     });
                 }
 
+ html += `<div style="margin-top: 25px; padding: 15px; background: rgba(255,255,255,0.1); border-radius: 12px; font-size: 0.9rem; color: rgba(255,255,255,0.8);">${result.analysis.disclaimer}</div>`;
+            }
+
+            imageResults.innerHTML = html;
+            imageResults.style.display = 'block';
+        }
 
 
 
