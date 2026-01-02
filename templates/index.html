@@ -793,6 +793,22 @@ function handleFileSelect(file) {
                     });
                 }
 
+ if (analysis.possible_conditions) {
+                    html += `<h4 style="color: white; margin-bottom: 15px;"><i class="fas fa-disease"></i> Possible Conditions:</h4>`;
+                    analysis.possible_conditions.forEach(condition => {
+                        const conditionText = typeof condition === 'string' ? condition : (condition.name || condition.toString());
+                        html += `<div class="condition"><i class="fas fa-info-circle"></i> ${conditionText}</div>`;
+                    });
+                }
+
+                if (analysis.recommendations) {
+                    html += `<h4 style="color: white; margin-bottom: 15px;"><i class="fas fa-first-aid"></i> Recommendations:</h4>`;
+                    analysis.recommendations.forEach(rec => {
+                        const className = rec.includes('🚨') ? 'emergency' : 'recommendation';
+                        html += `<div class="${className}"><i class="fas fa-check-circle"></i> ${rec}</div>`;
+                    });
+                }
+
 
 
 
