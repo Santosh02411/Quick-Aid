@@ -704,6 +704,27 @@ function handleFileSelect(file) {
             }
 
 
+            imageLoading.style.display = 'none';
+            analyzeBtn.style.display = 'block';
+        }
+
+        function displayImageResults(result) {
+            let html = '';
+
+            if (result.error) {
+                html = `<div class="emergency"><i class="fas fa-exclamation-triangle"></i> <strong>Error:</strong> ${result.error}</div>`;
+            } else {
+                html += `<h3 style="color: white; margin-bottom: 20px;"><i class="fas fa-chart-line"></i> Analysis Complete</h3>`;
+
+                if (result.analysis.detected_conditions) {
+                    html += `<h4 style="color: white; margin-bottom: 15px;"><i class="fas fa-stethoscope"></i> Detected Conditions:</h4>`;
+                    result.analysis.detected_conditions.forEach(condition => {
+                        html += `<div class="condition"><i class="fas fa-info-circle"></i> ${condition}</div>`;
+                    });
+                }
+
+
+
 
 
 
