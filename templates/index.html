@@ -750,6 +750,26 @@ function handleFileSelect(file) {
                 alert('Please describe your symptoms first');
                 return;
             }
+ symptomLoading.style.display = 'block';
+            symptomResults.style.display = 'none';
+            checkSymptomsBtn.style.display = 'none';
+
+            try {
+                const response = await fetch('/analyze_symptoms', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({symptoms: symptoms})
+                });
+
+                const result = await response.json();
+                displaySymptomResults(result);
+            } catch (error) {
+                displaySymptomResults({error: 'Network error occurred. Please try again.'});
+            }
+
+            symptomLoading.style.display = 'none';
+            checkSymptomsBtn.style.display = 'block';
+        }
 
 
 
