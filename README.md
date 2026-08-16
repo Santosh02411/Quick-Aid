@@ -66,6 +66,36 @@ basic rule-based mode without one).
 
 ---
 
+## Running with Docker
+
+The included `Dockerfile` runs the app under gunicorn as a non-root user, with
+the SQLite database and logs persisted outside the container via volumes.
+
+**With docker compose (recommended):**
+
+```bash
+cp .env.example .env   # fill in real GEMINI_API_KEY and SECRET_KEY
+docker compose up --build
+```
+
+Open `http://localhost:5000`. Data survives `docker compose down`; only
+`docker compose down -v` removes the `quickaid-data` / `quickaid-logs` volumes.
+
+**With plain Docker:**
+
+```bash
+docker build -t quickaid .
+docker run -p 5000:5000 --env-file .env \
+  -v quickaid-data:/app/data \
+  -v quickaid-logs:/app/logs \
+  quickaid
+```
+
+The image exposes a container-level `HEALTHCHECK` that hits `/health`, so
+`docker ps` shows the container's actual health status.
+
+---
+
 ## Usage
 
 - Create an account or log in.

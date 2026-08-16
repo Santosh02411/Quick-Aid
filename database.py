@@ -20,6 +20,13 @@ logger = get_logger('database')
 
 DB_PATH = os.getenv('DATABASE_PATH', os.path.join(os.path.dirname(__file__), 'quickaid.db'))
 
+# If DATABASE_PATH points into a directory that doesn't exist yet (e.g. a
+# fresh Docker volume mount), create it rather than failing on connect -
+# sqlite3.connect() does not create missing parent directories itself.
+_db_dir = os.path.dirname(DB_PATH)
+if _db_dir:
+    os.makedirs(_db_dir, exist_ok=True)
+
 
 @contextmanager
 def get_connection():
