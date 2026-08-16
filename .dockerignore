@@ -1,0 +1,38 @@
+# Never bake secrets or local env into the image
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+venv2/
+
+# Runtime data - mounted as volumes instead, see docker-compose.yml
+*.db
+uploads/*
+!uploads/.gitkeep
+logs/*
+!logs/.gitkeep
+
+# Tests / dev tooling not needed in the runtime image
+tests/
+.pytest_cache/
+.coverage
+htmlcov/
+requirements-dev.txt
+
+# VCS / editor / OS
+.git/
+.gitignore
+.DS_Store
+.vscode/
+.idea/
+
+# Docker itself
+Dockerfile
+docker-compose.yml
+.dockerignore
