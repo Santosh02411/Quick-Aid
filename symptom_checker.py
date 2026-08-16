@@ -1,23 +1,42 @@
 import json
-import re
 import os
-from typing import Dict, List, Tuple
+from typing import Dict, List, Literal
 from collections import defaultdict
-import google.generativeai as genai
+from google import genai
+from google.genai import types
+from pydantic import BaseModel
 from dotenv import load_dotenv
 
 load_dotenv()
 
+
+class SymptomAnalysisResult(BaseModel):
+    """Schema Gemini is constrained to reply in - no more find('{')/rfind('}') guessing."""
+    detected_symptoms: List[str]
+    possible_conditions: List[str]
+    urgency_level: Literal['low', 'medium', 'high']
+    recommendations: List[str]
+    emergency_alert: bool
+    safety_tips: List[str]
+
+
 class SymptomChecker:
+    # "gemini-flash-latest" is Google's stable alias for their current-generation
+    # Flash model, so this keeps working as Google ships new versions instead of
+    # pointing at a specific release (like the old 'gemini-1.5-flash') that gets
+    # deprecated and shut down over time. Pin to an exact version instead if you
+    # need reproducible/deterministic behavior across releases.
+    MODEL_NAME = 'gemini-flash-latest'
+
     def __init__(self):
-        # Configure Gemini API
         api_key = os.getenv('GEMINI_API_KEY')
         if api_key and api_key != 'your_gemini_api_key_here':
-            genai.configure(api_key=api_key)
+            self.client = genai.Client(api_key=api_key)
             self.use_gemini = True
-            self.model = genai.GenerativeModel('gemini-1.5-flash')
         else:
+            self.client = None
             self.use_gemini = False
+
         self.symptom_database = {
             'fever': {
                 'related_symptoms': ['chills', 'sweating', 'headache', 'fatigue'],
@@ -103,7 +122,7 @@ class SymptomChecker:
                 'urgency': 'low'
             }
         }
-        
+
         self.emergency_symptoms = [
             'chest pain', 'shortness of breath', 'severe headache', 'loss of consciousness',
             'severe bleeding', 'difficulty breathing', 'severe abdominal pain',
@@ -117,7 +136,7 @@ class SymptomChecker:
                 return self._analyze_with_gemini(symptom_text)
             else:
                 return self._analyze_basic_symptoms(symptom_text)
-            
+
         except Exception as e:
             return {
                 'error': f"Symptom analysis failed: {str(e)}",
@@ -130,88 +149,57 @@ class SymptomChecker:
         prompt = f"""
         You are a medical AI assistant. Analyze these symptoms carefully: "{symptom_text}"
 
-        Provide a comprehensive medical analysis with:
-
-        1. DETECTED SYMPTOMS: List all symptoms mentioned
-        2. POSSIBLE CONDITIONS: Most likely medical conditions (be specific)
-        3. URGENCY LEVEL: low/medium/high based on symptom severity
-        4. DETAILED RECOMMENDATIONS: Specific medical advice and next steps
-        5. EMERGENCY ALERT: true/false if immediate medical attention needed
-        6. SAFETY TIPS: Relevant care instructions
-
-        Consider:
+        Provide a comprehensive medical analysis considering:
         - Symptom combinations and patterns
         - Severity indicators
         - Duration and progression
         - Age-related factors
         - Emergency warning signs
 
-        Be accurate and specific. If symptoms suggest emergency conditions (chest pain, difficulty breathing, severe bleeding, stroke signs), clearly indicate high urgency.
-
-        Format as JSON with keys: detected_symptoms, possible_conditions, urgency_level, recommendations, emergency_alert, safety_tips
+        Be accurate and specific. If symptoms suggest emergency conditions (chest pain,
+        difficulty breathing, severe bleeding, stroke signs), clearly set emergency_alert
+        to true and urgency_level to "high".
         """
 
         try:
-            response = self.model.generate_content(prompt)
-            analysis_text = response.text
-            
-            return self._parse_gemini_symptom_response(analysis_text)
-            
-        except Exception as e:
+            response = self.client.models.generate_content(
+                model=self.MODEL_NAME,
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    response_mime_type='application/json',
+                    response_schema=SymptomAnalysisResult,
+                ),
+            )
+
+            return self._parse_gemini_symptom_response(response)
+
+        except Exception:
             return self._analyze_basic_symptoms(symptom_text)
 
-    def _parse_gemini_symptom_response(self, response_text: str) -> Dict:
-        """Parse Gemini symptom response into structured format"""
-        try:
-            # Try to extract JSON if present
-            if '{' in response_text and '}' in response_text:
-                start = response_text.find('{')
-                end = response_text.rfind('}') + 1
-                json_str = response_text[start:end]
-                parsed = json.loads(json_str)
-                
-                emergency_alert = {
-                    'alert': parsed.get('emergency_alert', False),
-                    'message': '🚨 EMERGENCY SYMPTOMS DETECTED - SEEK IMMEDIATE MEDICAL ATTENTION' if parsed.get('emergency_alert', False) else '',
-                    'action': 'Call 911 or go to nearest emergency room immediately' if parsed.get('emergency_alert', False) else ''
-                }
-                
-                return {
-                    'detected_symptoms': [str(s) for s in parsed.get('detected_symptoms', [])],
-                    'possible_conditions': [str(c) for c in parsed.get('possible_conditions', [])],
-                    'urgency_level': parsed.get('urgency_level', 'medium'),
-                    'recommendations': [str(r) for r in parsed.get('recommendations', [])],
-                    'emergency_alert': emergency_alert,
-                    'safety_tips': [str(t) for t in parsed.get('safety_tips', self._get_symptom_safety_tips())],
-                    'disclaimer': 'AI analysis for educational purposes only. Always consult healthcare professionals.'
-                }
-        except:
-            pass
-        
-        # Fallback: parse text response
-        lines = response_text.split('\n')
-        symptoms = []
-        conditions = []
-        recommendations = []
-        
-        for line in lines:
-            line = line.strip()
-            if any(word in line.lower() for word in ['symptom', 'experiencing', 'reports']):
-                symptoms.append(line)
-            elif any(word in line.lower() for word in ['condition', 'diagnosis', 'suggests', 'indicates']):
-                conditions.append(line)
-            elif any(word in line.lower() for word in ['recommend', 'should', 'treatment', 'advice']):
-                recommendations.append(line)
-        
-        # Check for emergency keywords
-        emergency_keywords = ['emergency', 'urgent', 'immediate', 'call 911', 'hospital']
-        is_emergency = any(keyword in response_text.lower() for keyword in emergency_keywords)
-        
+    def _parse_gemini_symptom_response(self, response) -> Dict:
+        """
+        Turn the Gemini response into our standard dict shape.
+        With response_schema set, Gemini is constrained to return valid JSON
+        matching SymptomAnalysisResult, so `response.parsed` is reliably
+        populated instead of needing to hunt for '{' / '}' in free text.
+        """
+        parsed = response.parsed  # a SymptomAnalysisResult instance, or None on failure
+
+        if parsed is not None:
+            result = parsed.model_dump()
+        else:
+            try:
+                result = json.loads(response.text)
+            except (json.JSONDecodeError, AttributeError, TypeError):
+                result = {}
+
+        is_emergency = bool(result.get('emergency_alert', False))
+
         return {
-            'detected_symptoms': [str(s) for s in symptoms[:5]] if symptoms else ['Symptom analysis completed'],
-            'possible_conditions': [str(c) for c in conditions[:5]] if conditions else ['Medical evaluation needed'],
-            'urgency_level': 'high' if is_emergency else 'medium',
-            'recommendations': [str(r) for r in recommendations[:8]] if recommendations else [
+            'detected_symptoms': [str(s) for s in result.get('detected_symptoms', [])],
+            'possible_conditions': [str(c) for c in result.get('possible_conditions', [])],
+            'urgency_level': result.get('urgency_level', 'medium'),
+            'recommendations': [str(r) for r in result.get('recommendations', [])] or [
                 'Monitor symptoms closely',
                 'Rest and stay hydrated',
                 'Seek medical attention if symptoms worsen',
@@ -222,25 +210,25 @@ class SymptomChecker:
                 'message': '🚨 EMERGENCY SYMPTOMS DETECTED - SEEK IMMEDIATE MEDICAL ATTENTION' if is_emergency else '',
                 'action': 'Call 911 or go to nearest emergency room immediately' if is_emergency else ''
             },
-            'safety_tips': self._get_symptom_safety_tips(),
+            'safety_tips': [str(t) for t in result.get('safety_tips', [])] or self._get_symptom_safety_tips(),
             'disclaimer': 'AI analysis for educational purposes only. Always consult healthcare professionals.'
         }
 
     def _analyze_basic_symptoms(self, symptom_text: str) -> Dict:
         """Fallback basic symptom analysis"""
         symptoms = self._extract_symptoms(symptom_text.lower())
-        
+
         if not symptoms:
             return {
                 'error': 'No recognizable symptoms found',
                 'recommendations': ['Please describe your symptoms more specifically'],
                 'disclaimer': 'Basic analysis only. For accurate diagnosis, please add Gemini API key and consult healthcare professionals.'
             }
-        
+
         analysis = self._analyze_symptom_combination(symptoms)
         recommendations = self._generate_symptom_recommendations(analysis)
         emergency_check = self._check_emergency_symptoms(symptoms)
-        
+
         return {
             'detected_symptoms': [str(s) for s in symptoms],
             'possible_conditions': [str(c) for c in analysis['conditions']],
@@ -254,7 +242,7 @@ class SymptomChecker:
     def _extract_symptoms(self, text: str) -> List[str]:
         """Extract symptoms from text input"""
         detected_symptoms = []
-        
+
         # Define symptom keywords and variations
         symptom_patterns = {
             'fever': ['fever', 'high temperature', 'hot', 'burning up'],
@@ -268,40 +256,40 @@ class SymptomChecker:
             'dizziness': ['dizzy', 'lightheaded', 'spinning', 'vertigo'],
             'sore_throat': ['sore throat', 'throat pain', 'throat hurts']
         }
-        
+
         for symptom, patterns in symptom_patterns.items():
             for pattern in patterns:
                 if pattern in text:
                     detected_symptoms.append(symptom)
                     break
-        
+
         return list(set(detected_symptoms))  # Remove duplicates
 
     def _analyze_symptom_combination(self, symptoms: List[str]) -> Dict:
         """Analyze combination of symptoms"""
         conditions = defaultdict(int)
         urgency_scores = []
-        
+
         for symptom in symptoms:
             if symptom in self.symptom_database:
                 symptom_data = self.symptom_database[symptom]
-                
+
                 # Add possible conditions
                 for condition in symptom_data['possible_conditions']:
                     conditions[condition] += 1
-                
+
                 # Track urgency
                 urgency_map = {'low': 1, 'medium': 2, 'high': 3}
                 urgency_scores.append(urgency_map.get(symptom_data['urgency'], 1))
-        
+
         # Determine overall urgency
         max_urgency = max(urgency_scores) if urgency_scores else 1
         urgency_levels = {1: 'low', 2: 'medium', 3: 'high'}
-        
+
         # Sort conditions by frequency
         sorted_conditions = sorted(conditions.items(), key=lambda x: x[1], reverse=True)
         top_conditions = [condition for condition, count in sorted_conditions[:5]]
-        
+
         return {
             'conditions': top_conditions,
             'urgency': urgency_levels[max_urgency]
@@ -311,7 +299,7 @@ class SymptomChecker:
         """Generate recommendations based on symptom analysis"""
         recommendations = []
         urgency = analysis['urgency']
-        
+
         if urgency == 'high':
             recommendations.extend([
                 '🚨 SEEK IMMEDIATE MEDICAL ATTENTION',
@@ -333,24 +321,24 @@ class SymptomChecker:
                 'Contact healthcare provider if symptoms persist or worsen',
                 'Use over-the-counter remedies as appropriate'
             ])
-        
+
         # Add general care recommendations
         recommendations.extend([
             'Keep a symptom diary to track changes',
             'Avoid self-medication without professional guidance',
             'Maintain good hygiene to prevent spread of illness'
         ])
-        
+
         return recommendations
 
     def _check_emergency_symptoms(self, symptoms: List[str]) -> Dict:
         """Check for emergency symptoms"""
         emergency_found = []
-        
+
         for symptom in symptoms:
             if any(emergency in symptom for emergency in self.emergency_symptoms):
                 emergency_found.append(symptom)
-        
+
         if emergency_found:
             return {
                 'alert': True,
@@ -358,7 +346,7 @@ class SymptomChecker:
                 'symptoms': emergency_found,
                 'action': 'Call 911 or go to nearest emergency room immediately'
             }
-        
+
         return {'alert': False}
 
     def _get_symptom_safety_tips(self) -> List[str]:

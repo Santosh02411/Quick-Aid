@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, jsonify, redirect, url_for
+from flask import Flask, render_template, request, jsonify, redirect, url_for, session
 import os
 import secrets
 import numpy as np
@@ -9,6 +9,7 @@ from flask_limiter.util import get_remote_address
 from medical_analyzer import MedicalAnalyzer
 from symptom_checker import SymptomChecker
 from dotenv import load_dotenv
+import database as db
 import json
 
 load_dotenv()
@@ -59,6 +60,20 @@ os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 # Initialize medical analyzer and symptom checker
 medical_analyzer = MedicalAnalyzer()
 symptom_checker = SymptomChecker()
+
+# Initialize history database (SQLite file, created on first run)
+db.init_db()
+
+
+def get_session_id() -> str:
+    """
+    Anonymous per-browser identifier used to scope history entries, since
+    this app has no login system. Stored in the signed Flask session cookie.
+    """
+    if 'session_id' not in session:
+        session['session_id'] = secrets.token_hex(16)
+    return session['session_id']
+
 
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'bmp'}
 
@@ -130,10 +145,12 @@ def upload_file():
         try:
             # Analyze the uploaded image
             analysis_result = medical_analyzer.analyze_image(filepath)
-            
+
             # Clean up uploaded file
             os.remove(filepath)
-            
+
+            db.save_image_analysis(get_session_id(), filename, analysis_result)
+
             return jsonify({
                 'success': True,
                 'analysis': analysis_result
@@ -169,7 +186,9 @@ def analyze_symptoms():
             }), 400
 
         analysis_result = symptom_checker.analyze_symptoms(symptoms)
-        
+
+        db.save_symptom_analysis(get_session_id(), symptoms, analysis_result)
+
         return jsonify({
             'success': True,
             'analysis': analysis_result
@@ -180,6 +199,22 @@ def analyze_symptoms():
 @app.route('/emergency')
 def emergency():
     return render_template('emergency.html')
+
+@app.route('/history')
+def history_page():
+    entries = db.get_history(get_session_id())
+    return render_template('history.html', entries=entries)
+
+@app.route('/api/history')
+def history_api():
+    entries = db.get_history(get_session_id())
+    return jsonify({'success': True, 'history': entries})
+
+@app.route('/api/history/clear', methods=['POST'])
+@limiter.limit("5 per minute")
+def clear_history():
+    db.delete_history(get_session_id())
+    return jsonify({'success': True})
 
 @app.errorhandler(429)
 def rate_limit_exceeded(e):

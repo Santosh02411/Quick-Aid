@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>History - Quick Aid</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        :root {
+            --bg1: #0ea5e9;
+            --bg2: #7c3aed;
+            --card: rgba(255,255,255,0.15);
+            --card-border: rgba(255,255,255,0.25);
+        }
+        body {
+            font-family: 'Inter', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: radial-gradient(1200px 800px at 90% 10%, rgba(255,255,255,0.12), transparent 40%),
+                        linear-gradient(135deg, var(--bg1) 0%, var(--bg2) 100%);
+            color: #fff;
+            min-height: 100vh;
+        }
+        .container { max-width: 900px; margin: 0 auto; padding: 28px; }
+        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 26px; flex-wrap: wrap; gap: 12px; }
+        .header h1 { font-size: 2em; letter-spacing: 0.3px; }
+        .header-actions { display: flex; gap: 10px; }
+        .btn { background: rgba(255,255,255,0.18); color: #fff; border: 1px solid var(--card-border); padding: 10px 18px; border-radius: 10px; cursor: pointer; font-size: 14px; text-decoration: none; display: inline-block; transition: transform 0.15s ease, filter 0.15s ease; }
+        .btn:hover { transform: translateY(-1px); filter: brightness(1.1); }
+        .btn-danger { background: rgba(239,68,68,0.35); }
+        .entry-card { background: var(--card); border: 1px solid var(--card-border); border-radius: 16px; padding: 20px; margin-bottom: 16px; backdrop-filter: blur(8px); }
+        .entry-top { display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
+        .entry-type { font-weight: 700; text-transform: uppercase; font-size: 0.75em; letter-spacing: 0.06em; padding: 4px 10px; border-radius: 999px; background: rgba(255,255,255,0.2); }
+        .entry-time { font-size: 0.85em; opacity: 0.8; }
+        .entry-title { font-size: 1.1em; margin-bottom: 8px; }
+        .urgency-high { color: #fecaca; font-weight: 700; }
+        .urgency-medium { color: #fde68a; font-weight: 700; }
+        .urgency-low { color: #bbf7d0; font-weight: 700; }
+        .tag-list { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+        .tag { background: rgba(255,255,255,0.15); padding: 4px 10px; border-radius: 999px; font-size: 0.8em; }
+        .empty-state { text-align: center; padding: 60px 20px; opacity: 0.85; }
+        .empty-state a { color: #fff; text-decoration: underline; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>📋 Your History</h1>
+            <div class="header-actions">
+                <a class="btn" href="/">← Back to Quick Aid</a>
+                {% if entries %}
+                <button class="btn btn-danger" onclick="clearHistory()">Clear History</button>
+                {% endif %}
+            </div>
+        </div>
+
+        {% if entries %}
+            {% for entry in entries %}
+            <div class="entry-card">
+                <div class="entry-top">
+                    <span class="entry-type">{{ '📸 Image Analysis' if entry.type == 'image' else '🤒 Symptom Check' }}</span>
+                    <span class="entry-time">{{ entry.created_at }}</span>
+                </div>
+
+                {% if entry.type == 'image' %}
+                    <div class="entry-title">{{ entry.original_filename or 'Uploaded image' }}</div>
+                    <div>Urgency:
+                        <span class="urgency-{{ entry.urgency or 'medium' }}">{{ (entry.urgency or 'unknown') | upper }}</span>
+                        &nbsp;·&nbsp; Confidence: {{ entry.confidence or 'n/a' }}
+                    </div>
+                    <div class="tag-list">
+                        {% for c in entry.detected_conditions %}<span class="tag">{{ c }}</span>{% endfor %}
+                    </div>
+                {% else %}
+                    <div class="entry-title">"{{ entry.symptom_text }}"</div>
+                    <div>Urgency:
+                        <span class="urgency-{{ entry.urgency_level or 'medium' }}">{{ (entry.urgency_level or 'unknown') | upper }}</span>
+                        {% if entry.emergency_alert %}&nbsp;·&nbsp; <span class="urgency-high">🚨 EMERGENCY FLAGGED</span>{% endif %}
+                    </div>
+                    <div class="tag-list">
+                        {% for s in entry.possible_conditions %}<span class="tag">{{ s }}</span>{% endfor %}
+                    </div>
+                {% endif %}
+            </div>
+            {% endfor %}
+        {% else %}
+            <div class="empty-state">
+                <p>No history yet. Try an <a href="/#image">image analysis</a> or <a href="/#symptoms">symptom check</a> first.</p>
+            </div>
+        {% endif %}
+    </div>
+
+    <script>
+        async function clearHistory() {
+            if (!confirm('Clear all your saved history? This cannot be undone.')) return;
+            try {
+                const res = await fetch('/api/history/clear', { method: 'POST' });
+                if (res.ok) {
+                    window.location.reload();
+                } else {
+                    alert('Could not clear history. Please try again.');
+                }
+            } catch (err) {
+                alert('Could not clear history. Please try again.');
+            }
+        }
+    </script>
+</body>
+</html>
