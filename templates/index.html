@@ -522,10 +522,17 @@
                 <li><a href="#image">Image Analysis</a></li>
                 <li><a href="#symptoms">Symptoms</a></li>
                 <li><a href="#emergency">Emergency</a></li>
+                {% if current_user.is_authenticated %}
                 <li><a href="/history">History</a></li>
+                <li><a href="#" onclick="document.getElementById('logout-form').submit(); return false;">Logout ({{ current_user.username }})</a></li>
+                {% else %}
+                <li><a href="/login">Log In</a></li>
+                <li><a href="/register">Sign Up</a></li>
+                {% endif %}
             </ul>
         </div>
     </nav>
+    <form id="logout-form" action="/logout" method="POST" style="display:none;"></form>
     <div class="container">
         <div class="main-content">
             <!-- Hero Section -->
@@ -698,6 +705,11 @@ function handleFileSelect(file) {
                     body: formData
                 });
 
+                if (response.status === 401) {
+                    window.location.href = '/login?next=' + encodeURIComponent(window.location.pathname);
+                    return;
+                }
+
                 const result = await response.json();
                 displayImageResults(result);
             } catch (error) {
@@ -761,6 +773,11 @@ function handleFileSelect(file) {
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({symptoms: symptoms})
                 });
+
+                if (response.status === 401) {
+                    window.location.href = '/login?next=' + encodeURIComponent(window.location.pathname);
+                    return;
+                }
 
                 const result = await response.json();
                 displaySymptomResults(result);

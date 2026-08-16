@@ -6,8 +6,11 @@ from google import genai
 from google.genai import types
 from pydantic import BaseModel
 from dotenv import load_dotenv
+from logging_config import get_logger
 
 load_dotenv()
+
+logger = get_logger('symptom_checker')
 
 
 class SymptomAnalysisResult(BaseModel):
@@ -138,6 +141,7 @@ class SymptomChecker:
                 return self._analyze_basic_symptoms(symptom_text)
 
         except Exception as e:
+            logger.error("Symptom analysis failed entirely for input length=%d", len(symptom_text), exc_info=True)
             return {
                 'error': f"Symptom analysis failed: {str(e)}",
                 'recommendations': ['Unable to analyze symptoms. Please consult a healthcare professional.'],
@@ -174,6 +178,10 @@ class SymptomChecker:
             return self._parse_gemini_symptom_response(response)
 
         except Exception:
+            logger.warning(
+                "Gemini symptom analysis failed - falling back to basic analysis",
+                exc_info=True
+            )
             return self._analyze_basic_symptoms(symptom_text)
 
     def _parse_gemini_symptom_response(self, response) -> Dict:
@@ -188,9 +196,11 @@ class SymptomChecker:
         if parsed is not None:
             result = parsed.model_dump()
         else:
+            logger.warning("Gemini response.parsed was empty; falling back to raw JSON text parsing")
             try:
                 result = json.loads(response.text)
             except (json.JSONDecodeError, AttributeError, TypeError):
+                logger.error("Gemini response could not be parsed as JSON at all", exc_info=True)
                 result = {}
 
         is_emergency = bool(result.get('emergency_alert', False))
@@ -336,7 +346,15 @@ class SymptomChecker:
         emergency_found = []
 
         for symptom in symptoms:
-            if any(emergency in symptom for emergency in self.emergency_symptoms):
+            # Symptom keys are underscore-separated (e.g. 'chest_pain') but
+            # self.emergency_symptoms uses space-separated phrases (e.g.
+            # 'chest pain'), so normalize before comparing - a plain
+            # substring check here would silently never match.
+            # Only check emergency-phrase-in-symptom (not the reverse): the
+            # reverse would let a plain 'headache' match the emergency
+            # phrase 'severe headache' just because it's a substring of it.
+            normalized_symptom = symptom.replace('_', ' ')
+            if any(emergency in normalized_symptom for emergency in self.emergency_symptoms):
                 emergency_found.append(symptom)
 
         if emergency_found:

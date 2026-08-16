@@ -6,12 +6,14 @@ AI-powered medical assistant for injury detection and health analysis.
 
 ## Features
 
+- 🔐 **User Accounts:** Sign up / log in required to use the AI features - each user's history is private to them.
 - 📸 **Image Analysis:** Detect injuries and skin conditions from images, powered by Gemini.
 - 🤒 **Symptom Checker:** AI-based health recommendations based on described symptoms.
-- 📋 **History:** Past image analyses and symptom checks are saved per browser session so you can look back at them (stored locally in SQLite).
-- 🚨 **Emergency Info:** Quick access to safety tips and urgent care guidance.
+- 📋 **History:** Past image analyses and symptom checks are saved per account so you can look back at them (stored locally in SQLite).
+- 🚨 **Emergency Info:** Quick access to safety tips and urgent care guidance — always public, no login required.
 - 💡 **Medical Guidance:** Educational recommendations and health safety guidelines.
 - 🛡️ **Basic-mode fallback:** Still works without a Gemini key, using simple rule-based image/symptom heuristics.
+- 📈 **Logging:** Structured logs (console + rotating file) covering requests, auth events, and Gemini failures, plus a `/health` endpoint for uptime monitoring.
 
 ---
 
@@ -60,23 +62,54 @@ basic rule-based mode without one).
    http://localhost:5000
    ```
 
+5. Sign up for an account (`/register`) to use image analysis, symptom checking, and history. The landing page and `/emergency` stay public without an account.
+
 ---
 
 ## Usage
 
+- Create an account or log in.
 - Upload images of injuries or skin conditions for AI analysis.
 - Enter symptoms in text for personalized health insights.
 - View past results any time on the **History** page.
-- Access emergency information and safety guidelines as needed.
+- Access emergency information and safety guidelines any time, logged in or not.
+
+---
+
+## Running Tests
+
+The test suite covers keyword extraction, the Gemini structured-output parsing
+(including its fallback paths), database/auth logic, and the full Flask
+request/response cycle (auth flow, route protection, input validation).
+
+```bash
+pip install -r requirements-dev.txt
+pytest tests/ -v
+```
+
+Tests run against an isolated temporary SQLite file and never touch your real
+`quickaid.db`, and use a placeholder `GEMINI_API_KEY` so they exercise the
+basic-mode fallback logic rather than making real API calls.
+
+---
+
+## Logging & Monitoring
+
+- Logs go to both the console and a rotating file at `logs/app.log` (5MB per file, 5 backups kept).
+- Every request is logged with method, path, status code, and duration.
+- Gemini failures (bad key, network error, malformed response) are logged with
+  full tracebacks instead of failing silently, before falling back to basic-mode analysis.
+- Set `LOG_LEVEL` (default `INFO`) and `LOG_DIR` (default `./logs`) via environment variables.
+- `GET /health` returns `{"status": "ok", "database": "ok", "gemini_configured": true|false}` — point an uptime monitor or load balancer health check at it.
 
 ---
 
 ## Data & Privacy
 
 - Uploaded images are analyzed and then deleted immediately — they are not stored.
-- Analysis _results_ (not the images themselves) are saved to a local SQLite database
-  (`quickaid.db`) so you can view your history. Entries are scoped to an anonymous
-  per-browser session cookie, since there's no login system.
+- Passwords are hashed (never stored in plaintext) using Werkzeug's `generate_password_hash`.
+- Analysis *results* (not the images themselves) are saved to a local SQLite database
+  (`quickaid.db`) scoped to your account, so you can view your history.
 - Clear your history any time from the History page.
 
 ---
@@ -99,9 +132,11 @@ basic rule-based mode without one).
 ## Tech Stack
 
 - **Frontend:** HTML, CSS, JavaScript
-- **Backend:** Python , Flask, Flask-Limiter for rate limiting
+- **Backend:** Python (Flask), Flask-Login for auth, Flask-Limiter for rate limiting
 - **Persistence:** SQLite (built into Python, no separate DB server required)
 - **AI:** Google Gemini via the [`google-genai`](https://pypi.org/project/google-genai/) SDK, using structured JSON output (Pydantic schemas) for reliable parsing
 - **Fallback analysis:** NumPy/Pillow-based rule heuristics when no Gemini key is configured
+- **Testing:** pytest, with a Flask test client and an isolated temp-file SQLite DB per test
+- **Logging:** Python's standard `logging` module, console + rotating file handler
 
 ---

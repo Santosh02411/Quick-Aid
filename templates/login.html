@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Log In - Quick Aid</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Inter', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            color: #0f172a;
+        }
+        .auth-card {
+            background: rgba(255,255,255,0.92);
+            border-radius: 20px;
+            padding: 40px;
+            width: 100%;
+            max-width: 400px;
+            box-shadow: 0 25px 45px rgba(0,0,0,0.2);
+        }
+        .auth-card h1 { font-size: 1.6em; margin-bottom: 6px; text-align: center; }
+        .auth-card .subtitle { text-align: center; color: #64748b; margin-bottom: 26px; font-size: 0.9em; }
+        label { display: block; font-size: 0.85em; font-weight: 600; margin-bottom: 6px; color: #334155; }
+        input {
+            width: 100%; padding: 12px 14px; margin-bottom: 18px; border-radius: 10px;
+            border: 1px solid #cbd5e1; font-size: 0.95em; font-family: inherit;
+        }
+        input:focus { outline: none; border-color: #0ea5e9; }
+        button {
+            width: 100%; padding: 13px; border: none; border-radius: 10px;
+            background: linear-gradient(135deg, #0ea5e9, #7c3aed); color: #fff;
+            font-size: 1em; font-weight: 600; cursor: pointer; transition: filter 0.15s ease;
+        }
+        button:hover { filter: brightness(1.08); }
+        .error-box {
+            background: #fee2e2; color: #b91c1c; padding: 10px 14px; border-radius: 10px;
+            font-size: 0.85em; margin-bottom: 18px;
+        }
+        .switch-link { text-align: center; margin-top: 20px; font-size: 0.9em; color: #64748b; }
+        .switch-link a { color: #0ea5e9; text-decoration: none; font-weight: 600; }
+        .back-link { display: block; text-align: center; margin-top: 14px; font-size: 0.85em; color: #94a3b8; text-decoration: none; }
+    </style>
+</head>
+<body>
+    <div class="auth-card">
+        <h1>🏥 Welcome back</h1>
+        <p class="subtitle">Log in to Quick Aid</p>
+
+        {% if error %}
+        <div class="error-box">{{ error }}</div>
+        {% endif %}
+
+        <form method="POST">
+            <label for="username">Username</label>
+            <input type="text" id="username" name="username" required autofocus autocomplete="username">
+
+            <label for="password">Password</label>
+            <input type="password" id="password" name="password" required autocomplete="current-password">
+
+            <button type="submit">Log In</button>
+        </form>
+
+        <p class="switch-link">Don't have an account? <a href="/register">Sign up</a></p>
+        <a class="back-link" href="/">← Back to Quick Aid</a>
+    </div>
+</body>
+</html>

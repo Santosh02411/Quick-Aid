@@ -7,8 +7,11 @@ from google import genai
 from google.genai import types
 from pydantic import BaseModel
 from dotenv import load_dotenv
+from logging_config import get_logger
 
 load_dotenv()
+
+logger = get_logger('medical_analyzer')
 
 
 class ImageAnalysisResult(BaseModel):
@@ -115,6 +118,7 @@ class MedicalAnalyzer:
                 return self._analyze_basic(image_path)
 
         except Exception as e:
+            logger.error("Image analysis failed entirely for %s", image_path, exc_info=True)
             return {
                 'error': f"Image analysis failed: {str(e)}",
                 'recommendations': ['Unable to analyze image. Please consult a healthcare professional.'],
@@ -162,6 +166,10 @@ class MedicalAnalyzer:
                 return self._parse_gemini_response(response)
 
         except Exception:
+            logger.warning(
+                "Gemini image analysis failed for %s - falling back to basic analysis",
+                image_path, exc_info=True
+            )
             return self._analyze_basic(image_path)
 
     def _parse_gemini_response(self, response) -> Dict:
@@ -179,9 +187,11 @@ class MedicalAnalyzer:
             # Structured output failed to validate (rare) - fall back to
             # parsing response.text as JSON directly, since it's still
             # constrained to be JSON by response_mime_type.
+            logger.warning("Gemini response.parsed was empty; falling back to raw JSON text parsing")
             try:
                 result = json.loads(response.text)
             except (json.JSONDecodeError, AttributeError, TypeError):
+                logger.error("Gemini response could not be parsed as JSON at all", exc_info=True)
                 result = {}
 
         return {
