@@ -1,14 +1,28 @@
 from flask import Flask, render_template, request, jsonify, redirect, url_for
 import os
+import secrets
 import numpy as np
 from PIL import Image
 from werkzeug.utils import secure_filename
 from medical_analyzer import MedicalAnalyzer
 from symptom_checker import SymptomChecker
+from dotenv import load_dotenv
 import json
 
+load_dotenv()
+
 app = Flask(__name__)
-app.config['SECRET_KEY'] = 'your-secret-key-here'
+
+# SECRET_KEY must come from the environment. If it's missing we generate a
+# random one for this process only (sessions won't survive a restart) and
+# warn loudly instead of silently using a predictable default.
+_secret_key = os.getenv('SECRET_KEY')
+if not _secret_key or _secret_key == 'change_this_to_a_random_secret_key':
+    _secret_key = secrets.token_hex(32)
+    print("WARNING: SECRET_KEY not set in .env — using a temporary random key "
+          "for this run. Set SECRET_KEY in .env for stable sessions across restarts.")
+app.config['SECRET_KEY'] = _secret_key
+
 app.config['UPLOAD_FOLDER'] = 'uploads'
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
 
@@ -81,7 +95,15 @@ def emergency():
     return render_template('emergency.html')
 
 if __name__ == '__main__':
+    debug_mode = os.getenv('FLASK_DEBUG', 'False').lower() in ('1', 'true', 'yes')
     print("Starting Quick Aid Medical Assistant...")
     print("⚠️  DISCLAIMER: This tool is for educational purposes only.")
     print("⚠️  Always consult healthcare professionals for medical advice.")
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    if debug_mode:
+        print("⚠️  Running in DEBUG mode — never do this in production, "
+              "it exposes an interactive debugger/RCE risk.")
+    else:
+        print("Running with debug mode OFF. For production, use a WSGI server "
+              "instead of this dev server, e.g.:")
+        print("    gunicorn -w 2 -b 0.0.0.0:5000 app:app")
+    app.run(debug=debug_mode, host='0.0.0.0', port=5000)
