@@ -32,17 +32,11 @@
             width: 100%; padding: 12px 14px; margin-bottom: 18px; border-radius: 10px;
             border: 1px solid #cbd5e1; font-size: 0.95em; font-family: inherit;
         }
-        input:focus { outline: none; border-color: #0369a1; }
-        select {
-            width: 100%; padding: 12px 14px; margin-bottom: 18px; border-radius: 10px;
-            border: 1px solid #cbd5e1; font-size: 0.95em; font-family: inherit;
-            background: #fff; color: #0f172a;
-        }
-        select:focus { outline: none; border-color: #0369a1; }
-        .hint { font-size: 0.78em; color: #64748b; margin-top: -12px; margin-bottom: 16px; }
+        input:focus { outline: none; border-color: #0ea5e9; }
+        .hint { font-size: 0.78em; color: #94a3b8; margin-top: -12px; margin-bottom: 16px; }
         button {
             width: 100%; padding: 13px; border: none; border-radius: 10px;
-            background: linear-gradient(135deg, #0369a1, #7c3aed); color: #fff;
+            background: linear-gradient(135deg, #0ea5e9, #7c3aed); color: #fff;
             font-size: 1em; font-weight: 600; cursor: pointer; transition: filter 0.15s ease;
         }
         button:hover { filter: brightness(1.08); }
@@ -51,12 +45,12 @@
             font-size: 0.85em; margin-bottom: 18px;
         }
         .switch-link { text-align: center; margin-top: 20px; font-size: 0.9em; color: #64748b; }
-        .switch-link a { color: #0369a1; text-decoration: none; font-weight: 600; }
-        .back-link { display: block; text-align: center; margin-top: 14px; font-size: 0.85em; color: #64748b; text-decoration: none; }
+        .switch-link a { color: #0ea5e9; text-decoration: none; font-weight: 600; }
+        .back-link { display: block; text-align: center; margin-top: 14px; font-size: 0.85em; color: #94a3b8; text-decoration: none; }
     </style>
 </head>
 <body>
-    <main class="auth-card" id="main-content">
+    <div class="auth-card">
         <h1>🏥 Create your account</h1>
         <p class="subtitle">Sign up for Quick Aid</p>
 
@@ -76,19 +70,11 @@
             <input type="password" id="password" name="password" required minlength="8" autocomplete="new-password">
             <div class="hint">At least 8 characters.</div>
 
-            <label for="region">Region</label>
-            <select id="region" name="region">
-                {% for code, info in regions.items() %}
-                <option value="{{ code }}" {% if code == 'INTL' %}selected{% endif %}>{{ info.label }}</option>
-                {% endfor %}
-            </select>
-            <div class="hint">Used to show the right emergency number and units for your area. You can change this later.</div>
-
             <button type="submit">Sign Up</button>
         </form>
 
         <p class="switch-link">Already have an account? <a href="/login">Log in</a></p>
         <a class="back-link" href="/">← Back to Quick Aid</a>
-    </main>
+    </div>
 </body>
 </html>

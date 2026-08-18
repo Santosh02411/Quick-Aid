@@ -8,7 +8,7 @@
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         :root {
-            --bg1: #0369a1;
+            --bg1: #0ea5e9;
             --bg2: #7c3aed;
             --card: rgba(255,255,255,0.15);
             --card-border: rgba(255,255,255,0.25);
@@ -42,7 +42,7 @@
     </style>
 </head>
 <body>
-    <main class="container" id="main-content">
+    <div class="container">
         <div class="header">
             <h1>📋 Your History</h1>
             <div class="header-actions">
@@ -87,7 +87,7 @@
                 <p>No history yet. Try an <a href="/#image">image analysis</a> or <a href="/#symptoms">symptom check</a> first.</p>
             </div>
         {% endif %}
-    </main>
+    </div>
 
     <script>
         async function clearHistory() {

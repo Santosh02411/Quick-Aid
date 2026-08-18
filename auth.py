@@ -19,18 +19,17 @@ login_manager.login_message_category = 'info'
 
 
 class User(UserMixin):
-    def __init__(self, id, username, email, region='INTL'):
+    def __init__(self, id, username, email):
         # Flask-Login expects get_id() to return a string.
         self.id = str(id)
         self.username = username
         self.email = email
-        self.region = region
 
     @staticmethod
     def from_row(row):
         if not row:
             return None
-        return User(row['id'], row['username'], row['email'], row.get('region', 'INTL'))
+        return User(row['id'], row['username'], row['email'])
 
 
 @login_manager.user_loader

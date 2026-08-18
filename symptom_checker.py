@@ -7,7 +7,6 @@ from google.genai import types
 from pydantic import BaseModel
 from dotenv import load_dotenv
 from logging_config import get_logger
-from localization import localize_analysis, prompt_context, DEFAULT_REGION
 
 load_dotenv()
 
@@ -49,7 +48,7 @@ class SymptomChecker:
                     'Rest and stay hydrated',
                     'Take fever-reducing medication (acetaminophen/ibuprofen)',
                     'Monitor temperature regularly',
-                    'Seek medical attention if fever exceeds {FEVER_TEMP}',
+                    'Seek medical attention if fever exceeds 103°F (39.4°C)',
                     'Contact doctor if fever persists more than 3 days'
                 ],
                 'urgency': 'medium'
@@ -71,7 +70,7 @@ class SymptomChecker:
                 'possible_conditions': ['heart attack', 'angina', 'muscle strain', 'anxiety'],
                 'recommendations': [
                     '🚨 SEEK IMMEDIATE MEDICAL ATTENTION',
-                    'Call {EMERGENCY_NUMBER} if severe or accompanied by other symptoms',
+                    'Call 911 if severe or accompanied by other symptoms',
                     'Do not drive yourself to hospital',
                     'Chew aspirin if not allergic (only if advised by emergency services)'
                 ],
@@ -109,7 +108,7 @@ class SymptomChecker:
                     'Sit upright and try to stay calm',
                     'Use prescribed inhaler if available',
                     'Loosen tight clothing',
-                    'Call {EMERGENCY_NUMBER} if breathing becomes extremely difficult'
+                    'Call 911 if breathing becomes extremely difficult'
                 ],
                 'urgency': 'high'
             },
@@ -133,13 +132,13 @@ class SymptomChecker:
             'signs of stroke', 'severe allergic reaction', 'high fever with stiff neck'
         ]
 
-    def analyze_symptoms(self, symptom_text: str, region: str = DEFAULT_REGION) -> Dict:
+    def analyze_symptoms(self, symptom_text: str) -> Dict:
         """Analyze symptoms and provide medical recommendations"""
         try:
             if self.use_gemini:
-                result = self._analyze_with_gemini(symptom_text, region)
+                return self._analyze_with_gemini(symptom_text)
             else:
-                result = self._analyze_basic_symptoms(symptom_text)
+                return self._analyze_basic_symptoms(symptom_text)
 
         except Exception as e:
             logger.error("Symptom analysis failed entirely for input length=%d", len(symptom_text), exc_info=True)
@@ -149,16 +148,8 @@ class SymptomChecker:
                 'disclaimer': 'This tool cannot replace professional medical advice.'
             }
 
-        # Applies regardless of which path produced the result: substitutes
-        # the {EMERGENCY_NUMBER}/{FEVER_TEMP} placeholders used by our own
-        # fallback strings. Real Gemini-generated text won't contain these
-        # tokens, so this is a no-op there - the region context passed into
-        # the prompt is what steers Gemini's own wording instead.
-        return localize_analysis(result, region)
-
-    def _analyze_with_gemini(self, symptom_text: str, region: str = DEFAULT_REGION) -> Dict:
+    def _analyze_with_gemini(self, symptom_text: str) -> Dict:
         """Use Gemini AI for accurate symptom analysis"""
-        region_note = prompt_context(region)
         prompt = f"""
         You are a medical AI assistant. Analyze these symptoms carefully: "{symptom_text}"
 
@@ -172,8 +163,6 @@ class SymptomChecker:
         Be accurate and specific. If symptoms suggest emergency conditions (chest pain,
         difficulty breathing, severe bleeding, stroke signs), clearly set emergency_alert
         to true and urgency_level to "high".
-
-        {region_note}
         """
 
         try:
@@ -229,7 +218,7 @@ class SymptomChecker:
             'emergency_alert': {
                 'alert': is_emergency,
                 'message': '🚨 EMERGENCY SYMPTOMS DETECTED - SEEK IMMEDIATE MEDICAL ATTENTION' if is_emergency else '',
-                'action': 'Call {EMERGENCY_NUMBER} or go to nearest emergency room immediately' if is_emergency else ''
+                'action': 'Call 911 or go to nearest emergency room immediately' if is_emergency else ''
             },
             'safety_tips': [str(t) for t in result.get('safety_tips', [])] or self._get_symptom_safety_tips(),
             'disclaimer': 'AI analysis for educational purposes only. Always consult healthcare professionals.'
@@ -247,13 +236,7 @@ class SymptomChecker:
             }
 
         analysis = self._analyze_symptom_combination(symptoms)
-        specific_recommendations = self._collect_symptom_specific_recommendations(symptoms)
-        generic_recommendations = self._generate_symptom_recommendations(analysis)
-        # Specific, symptom-by-symptom guidance (e.g. the exact fever
-        # threshold to watch for) is more actionable than the generic
-        # urgency-tier text, so it leads; generic text fills in anything
-        # not already covered. Dedup while preserving this order.
-        recommendations = list(dict.fromkeys(specific_recommendations + generic_recommendations))
+        recommendations = self._generate_symptom_recommendations(analysis)
         emergency_check = self._check_emergency_symptoms(symptoms)
 
         return {
@@ -265,19 +248,6 @@ class SymptomChecker:
             'safety_tips': [str(t) for t in self._get_symptom_safety_tips()],
             'disclaimer': 'Basic analysis only. For accurate diagnosis, please add Gemini API key and consult healthcare professionals.'
         }
-
-    def _collect_symptom_specific_recommendations(self, symptoms: List[str]) -> List[str]:
-        """
-        Pull the detailed, symptom-specific recommendations defined in
-        self.symptom_database (e.g. the exact fever threshold, chest-pain
-        instructions) for each detected symptom, deduplicated and in the
-        order symptoms were detected.
-        """
-        collected: List[str] = []
-        for symptom in symptoms:
-            if symptom in self.symptom_database:
-                collected.extend(self.symptom_database[symptom].get('recommendations', []))
-        return list(dict.fromkeys(collected))
 
     def _extract_symptoms(self, text: str) -> List[str]:
         """Extract symptoms from text input"""
@@ -343,7 +313,7 @@ class SymptomChecker:
         if urgency == 'high':
             recommendations.extend([
                 '🚨 SEEK IMMEDIATE MEDICAL ATTENTION',
-                'Call {EMERGENCY_NUMBER} or go to emergency room',
+                'Call 911 or go to emergency room',
                 'Do not delay medical care',
                 'Have someone accompany you if possible'
             ])
@@ -392,7 +362,7 @@ class SymptomChecker:
                 'alert': True,
                 'message': '🚨 EMERGENCY SYMPTOMS DETECTED - SEEK IMMEDIATE MEDICAL ATTENTION',
                 'symptoms': emergency_found,
-                'action': 'Call {EMERGENCY_NUMBER} or go to nearest emergency room immediately'
+                'action': 'Call 911 or go to nearest emergency room immediately'
             }
 
         return {'alert': False}
