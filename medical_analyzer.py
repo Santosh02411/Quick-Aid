@@ -8,6 +8,7 @@ from google.genai import types
 from pydantic import BaseModel
 from dotenv import load_dotenv
 from logging_config import get_logger
+from localization import localize_analysis, prompt_context, DEFAULT_REGION
 
 load_dotenv()
 
@@ -109,13 +110,13 @@ class MedicalAnalyzer:
             }
         }
 
-    def analyze_image(self, image_path: str) -> Dict:
+    def analyze_image(self, image_path: str, region: str = DEFAULT_REGION) -> Dict:
         """Analyze medical image and provide recommendations"""
         try:
             if self.use_gemini:
-                return self._analyze_with_gemini(image_path)
+                result = self._analyze_with_gemini(image_path, region)
             else:
-                return self._analyze_basic(image_path)
+                result = self._analyze_basic(image_path)
 
         except Exception as e:
             logger.error("Image analysis failed entirely for %s", image_path, exc_info=True)
@@ -125,7 +126,14 @@ class MedicalAnalyzer:
                 'disclaimer': 'This tool cannot replace professional medical advice.'
             }
 
-    def _analyze_with_gemini(self, image_path: str) -> Dict:
+        # Applies regardless of which path produced the result: substitutes
+        # the {EMERGENCY_NUMBER}/{FEVER_TEMP} placeholders used by our own
+        # fallback strings. Real Gemini-generated text won't contain these
+        # tokens, so this is a no-op there - the region context passed into
+        # the prompt is what steers Gemini's own wording instead.
+        return localize_analysis(result, region)
+
+    def _analyze_with_gemini(self, image_path: str, region: str = DEFAULT_REGION) -> Dict:
         """Use Gemini AI for accurate medical image analysis"""
         try:
             with Image.open(image_path) as image:
@@ -135,8 +143,10 @@ class MedicalAnalyzer:
                 channel_std = np.std(arr, axis=(0, 1))
                 is_grayscale_like = float(np.mean(channel_std)) < 5.0
 
+                region_note = prompt_context(region)
+
                 if is_grayscale_like:
-                    prompt = """
+                    prompt = f"""
                     You are a medical AI assistant specializing in radiography. Analyze this X-ray image and provide a concise, clinically relevant assessment focused on bone and joint findings.
 
                     Consider: fracture lines, cortical discontinuity, displacement/angulation, joint alignment, visible hardware, soft-tissue swelling.
@@ -144,14 +154,18 @@ class MedicalAnalyzer:
 
                     detected_conditions should list specific findings (e.g., "distal radius fracture", "no acute fracture detected").
                     recommendations should be specific next steps: immobilization, urgent orthopedic consult, CT/MRI suggestions, follow-up timing.
+
+                    {region_note}
                     """
                 else:
-                    prompt = """
+                    prompt = f"""
                     You are a medical AI assistant. Analyze this clinical image.
 
                     Focus on visible features such as wounds, burns, bruises, rashes, swelling, or infection.
                     Be specific in detected_conditions. If uncertain, state uncertainty clearly.
                     recommendations should be specific treatment/care steps.
+
+                    {region_note}
                     """
 
                 response = self.client.models.generate_content(
@@ -311,7 +325,7 @@ class MedicalAnalyzer:
     def _get_safety_tips(self) -> List[str]:
         """Get general safety tips"""
         return [
-            '🚨 Call emergency services (911) for severe injuries',
+            '🚨 Call emergency services ({EMERGENCY_NUMBER}) for severe injuries',
             '🩹 Keep a well-stocked first aid kit accessible',
             '🧼 Always wash hands before treating wounds',
             '💊 Know your allergies and current medications',

@@ -14,10 +14,12 @@ from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from medical_analyzer import MedicalAnalyzer
 from symptom_checker import SymptomChecker
+from conversation import ConversationService
 from dotenv import load_dotenv
 import database as db
 from auth import login_manager, User
 from logging_config import get_logger
+from localization import REGIONS, DEFAULT_REGION, get_region_info
 import json
 import re
 
@@ -64,6 +66,10 @@ limiter = Limiter(
 MAX_SYMPTOM_LENGTH = 1000
 MIN_SYMPTOM_LENGTH = 3
 
+# Follow-up question constraints
+MAX_FOLLOWUP_LENGTH = 500
+MIN_FOLLOWUP_LENGTH = 2
+
 # Account constraints
 USERNAME_RE = re.compile(r'^[A-Za-z0-9_]{3,30}$')
 MIN_PASSWORD_LENGTH = 8
@@ -81,14 +87,21 @@ IMAGE_SIGNATURES = {
 # Create upload directory if it doesn't exist
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
-# Initialize medical analyzer and symptom checker
+# Initialize medical analyzer, symptom checker, and follow-up conversation service
 medical_analyzer = MedicalAnalyzer()
 symptom_checker = SymptomChecker()
+conversation_service = ConversationService()
 
 # Initialize database (SQLite file, created on first run)
 db.init_db()
 
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'bmp'}
+
+
+def get_user_region() -> str:
+    """The signed-in user's region preference, or the safe default if unset/unknown."""
+    region = getattr(current_user, 'region', None)
+    return region if region in REGIONS else DEFAULT_REGION
 
 
 # ---------------------------------------------------------------------------
@@ -168,12 +181,29 @@ def validate_image_file(filepath, extension):
 
 @app.route('/')
 def index():
-    return render_template('index.html')
+    if current_user.is_authenticated:
+        region_code = get_user_region()
+    else:
+        region_code = DEFAULT_REGION
+    info = get_region_info(region_code)
+    return render_template('index.html', emergency_number=info['emergency_number'], regions=REGIONS)
 
 
 @app.route('/emergency')
 def emergency():
-    return render_template('emergency.html')
+    if current_user.is_authenticated:
+        region_code = get_user_region()
+    else:
+        region_code = DEFAULT_REGION
+    info = get_region_info(region_code)
+    return render_template(
+        'emergency.html',
+        regions=REGIONS,
+        current_region=region_code,
+        region_label=info['label'],
+        emergency_number=info['emergency_number'],
+        is_authenticated=current_user.is_authenticated,
+    )
 
 
 @app.route('/health')
@@ -205,33 +235,38 @@ def register():
         return redirect(url_for('index'))
 
     if request.method == 'GET':
-        return render_template('register.html')
+        return render_template('register.html', regions=REGIONS)
 
     username = (request.form.get('username') or '').strip()
     email = (request.form.get('email') or '').strip().lower()
     password = request.form.get('password') or ''
+    region = (request.form.get('region') or DEFAULT_REGION).strip()
+    if region not in REGIONS:
+        region = DEFAULT_REGION
 
     if not username or not email or not password:
-        return render_template('register.html', error='All fields are required.'), 400
+        return render_template('register.html', error='All fields are required.', regions=REGIONS), 400
 
     if not USERNAME_RE.match(username):
         return render_template(
             'register.html',
-            error='Username must be 3-30 characters: letters, numbers, underscores only.'
+            error='Username must be 3-30 characters: letters, numbers, underscores only.',
+            regions=REGIONS
         ), 400
 
     if '@' not in email or '.' not in email.split('@')[-1]:
-        return render_template('register.html', error='Please enter a valid email address.'), 400
+        return render_template('register.html', error='Please enter a valid email address.', regions=REGIONS), 400
 
     if len(password) < MIN_PASSWORD_LENGTH:
         return render_template(
             'register.html',
-            error=f'Password must be at least {MIN_PASSWORD_LENGTH} characters.'
+            error=f'Password must be at least {MIN_PASSWORD_LENGTH} characters.',
+            regions=REGIONS
         ), 400
 
-    user_row = db.create_user(username, email, password)
+    user_row = db.create_user(username, email, password, region)
     if user_row is None:
-        return render_template('register.html', error='That username or email is already taken.'), 409
+        return render_template('register.html', error='That username or email is already taken.', regions=REGIONS), 409
 
     user = User.from_row(user_row)
     login_user(user)
@@ -305,14 +340,17 @@ def upload_file():
             return jsonify({'error': f'Invalid image file: {error_message}'}), 400
 
         try:
-            analysis_result = medical_analyzer.analyze_image(filepath)
+            region = get_user_region()
+            analysis_result = medical_analyzer.analyze_image(filepath, region=region)
             os.remove(filepath)
 
-            db.save_image_analysis(int(current_user.id), filename, analysis_result)
+            analysis_id = db.save_image_analysis(int(current_user.id), filename, analysis_result)
 
             return jsonify({
                 'success': True,
-                'analysis': analysis_result
+                'analysis': analysis_result,
+                'analysis_id': analysis_id,
+                'analysis_type': 'image',
             })
         except Exception as e:
             if os.path.exists(filepath):
@@ -347,13 +385,15 @@ def analyze_symptoms():
                 'error': f'Symptom description is too long (max {MAX_SYMPTOM_LENGTH} characters)'
             }), 400
 
-        analysis_result = symptom_checker.analyze_symptoms(symptoms)
+        analysis_result = symptom_checker.analyze_symptoms(symptoms, region=get_user_region())
 
-        db.save_symptom_analysis(int(current_user.id), symptoms, analysis_result)
+        analysis_id = db.save_symptom_analysis(int(current_user.id), symptoms, analysis_result)
 
         return jsonify({
             'success': True,
-            'analysis': analysis_result
+            'analysis': analysis_result,
+            'analysis_id': analysis_id,
+            'analysis_type': 'symptom',
         })
     except Exception as e:
         logger.error("Symptom analysis failed for user=%s", current_user.username, exc_info=True)
@@ -381,6 +421,84 @@ def clear_history():
     db.delete_history(int(current_user.id))
     logger.info("History cleared for user=%s", current_user.username)
     return jsonify({'success': True})
+
+
+@app.route('/api/follow_up', methods=['POST'])
+@login_required
+@limiter.limit("20 per minute")
+def follow_up():
+    data = request.get_json(silent=True) or {}
+    analysis_type = data.get('analysis_type')
+    analysis_id = data.get('analysis_id')
+    question = data.get('question', '')
+
+    if analysis_type not in ('image', 'symptom'):
+        return jsonify({'error': 'analysis_type must be "image" or "symptom"'}), 400
+
+    try:
+        analysis_id = int(analysis_id)
+    except (TypeError, ValueError):
+        return jsonify({'error': 'analysis_id must be a number'}), 400
+
+    if not isinstance(question, str):
+        return jsonify({'error': 'Question must be provided as text'}), 400
+    question = question.strip()
+
+    if len(question) < MIN_FOLLOWUP_LENGTH:
+        return jsonify({'error': 'Please enter a question'}), 400
+    if len(question) > MAX_FOLLOWUP_LENGTH:
+        return jsonify({'error': f'Question is too long (max {MAX_FOLLOWUP_LENGTH} characters)'}), 400
+
+    analysis = db.get_analysis(analysis_type, analysis_id, int(current_user.id))
+    if analysis is None:
+        # Either it doesn't exist, or it belongs to someone else - either
+        # way, don't distinguish the two in the response.
+        return jsonify({'error': 'Analysis not found'}), 404
+
+    # Summarize the stored analysis as compact JSON context for Gemini,
+    # dropping fields that don't help answer follow-up questions.
+    summary = json.dumps({
+        k: v for k, v in analysis.items()
+        if k not in ('id', 'type', 'created_at', 'follow_up_history')
+    })
+
+    answer = conversation_service.ask_follow_up(
+        analysis_type=analysis_type,
+        analysis_summary=summary,
+        history=analysis['follow_up_history'],
+        question=question,
+        region=get_user_region(),
+    )
+
+    updated_history = db.append_follow_up(analysis_type, analysis_id, int(current_user.id), question, answer)
+
+    return jsonify({
+        'success': True,
+        'answer': answer,
+        'follow_up_history': updated_history,
+    })
+
+
+@app.route('/api/region', methods=['POST'])
+@login_required
+@limiter.limit("10 per minute")
+def update_region():
+    data = request.get_json(silent=True) or {}
+    region = data.get('region', '')
+    if region not in REGIONS:
+        return jsonify({'error': 'Unknown region'}), 400
+
+    db.update_user_region(int(current_user.id), region)
+    current_user.region = region
+    return jsonify({'success': True, 'region': region})
+
+
+@app.route('/api/regions')
+def list_regions():
+    """Public - the register page needs this before the user has an account."""
+    return jsonify({
+        code: info['label'] for code, info in REGIONS.items()
+    })
 
 
 @app.errorhandler(429)

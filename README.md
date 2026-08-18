@@ -9,11 +9,16 @@ AI-powered medical assistant for injury detection and health analysis.
 - 🔐 **User Accounts:** Sign up / log in required to use the AI features - each user's history is private to them.
 - 📸 **Image Analysis:** Detect injuries and skin conditions from images, powered by Gemini.
 - 🤒 **Symptom Checker:** AI-based health recommendations based on described symptoms.
-- 📋 **History:** Past image analyses and symptom checks are saved per account so you can look back at them (stored locally in SQLite).
-- 🚨 **Emergency Info:** Quick access to safety tips and urgent care guidance — always public, no login required.
+- 💬 **Follow-up Questions:** Ask follow-up questions about any analysis ("is this serious?") with full conversational context - requires Gemini to be configured.
+- 🌍 **Localization:** Pick your region at signup (or any time from the navbar) for the correct local emergency number (US 911, UK 999, EU/India 112, Australia 000, or a generic international fallback) and temperature-unit ordering, in both AI-generated and fallback content.
+- 📋 **History:** Past image analyses, symptom checks, and their follow-up conversations are saved per account so you can look back at them (stored locally in SQLite).
+- 🚨 **Emergency Info:** Quick access to safety tips and urgent care guidance — always public, no login required, and shows every region's number for reference.
 - 💡 **Medical Guidance:** Educational recommendations and health safety guidelines.
 - 🛡️ **Basic-mode fallback:** Still works without a Gemini key, using simple rule-based image/symptom heuristics.
 - 📈 **Logging:** Structured logs (console + rotating file) covering requests, auth events, and Gemini failures, plus a `/health` endpoint for uptime monitoring.
+- ♿ **Accessibility:** Audited with axe-core (0 violations across all pages), WCAG AA color contrast, keyboard-accessible mobile navigation, skip-to-content link, and screen-reader landmarks.
+- 📱 **Mobile-responsive:** Card layouts, forms, and navigation (via an accessible hamburger menu) all adapt below 768px.
+- 🐳 **Docker:** Production-ready `Dockerfile` + `docker-compose.yml`, running under gunicorn as a non-root user with persistent volumes.
 
 ---
 
@@ -98,10 +103,12 @@ The image exposes a container-level `HEALTHCHECK` that hits `/health`, so
 
 ## Usage
 
-- Create an account or log in.
+- Create an account or log in, picking your region (used for the correct emergency number and units).
 - Upload images of injuries or skin conditions for AI analysis.
 - Enter symptoms in text for personalized health insights.
-- View past results any time on the **History** page.
+- Ask follow-up questions about any result right below it (needs Gemini configured).
+- Change your region any time from the dropdown in the navbar.
+- View past results and their follow-up conversations any time on the **History** page.
 - Access emergency information and safety guidelines any time, logged in or not.
 
 ---
@@ -144,6 +151,25 @@ basic-mode fallback logic rather than making real API calls.
 
 ---
 
+## Accessibility
+
+Audited with [axe-core](https://github.com/dequelabs/axe-core) against the real rendered
+HTML of every page (landing, emergency, history, login, register) - **0 violations**.
+Also includes:
+
+- A skip-to-content link and proper `<main>` landmarks on every page.
+- WCAG AA color contrast (4.5:1+) - several of the original theme colors were
+  darkened after failing contrast checks (most notably on the emergency page).
+- A keyboard-accessible mobile navigation menu (proper `aria-expanded`/`aria-controls`,
+  closes on Escape or an outside click) - the original mobile menu had no way to open it at all.
+- 44px-minimum touch targets for interactive nav elements.
+
+To re-run the audit yourself: render a page's HTML (e.g. via the Flask test client),
+then feed it to `axe.run()` in a jsdom environment (color-contrast needs a real browser,
+so that rule needs manual/Lighthouse verification instead).
+
+---
+
 ## Developer Information
 
 - **Developed by:** Santosh Madannavar
@@ -163,10 +189,12 @@ basic-mode fallback logic rather than making real API calls.
 
 - **Frontend:** HTML, CSS, JavaScript
 - **Backend:** Python (Flask), Flask-Login for auth, Flask-Limiter for rate limiting
-- **Persistence:** SQLite (built into Python, no separate DB server required)
-- **AI:** Google Gemini via the [`google-genai`](https://pypi.org/project/google-genai/) SDK, using structured JSON output (Pydantic schemas) for reliable parsing
+- **Persistence:** SQLite (built into Python, no separate DB server required), with an automatic schema migration path for upgrading existing databases
+- **AI:** Google Gemini via the [`google-genai`](https://pypi.org/project/google-genai/) SDK, using structured JSON output (Pydantic schemas) for reliable parsing, plus multi-turn chat for follow-up questions (`conversation.py`)
+- **Localization:** Region-aware emergency numbers and units (`localization.py`), applied to both AI-generated and fallback content
 - **Fallback analysis:** NumPy/Pillow-based rule heuristics when no Gemini key is configured
 - **Testing:** pytest, with a Flask test client and an isolated temp-file SQLite DB per test
 - **Logging:** Python's standard `logging` module, console + rotating file handler
+- **Deployment:** Docker + docker-compose, gunicorn, non-root container user
 
 ---
