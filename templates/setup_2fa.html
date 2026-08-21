@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Set Up Two-Factor Authentication - Quick Aid</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Inter', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            color: #0f172a;
+        }
+        .auth-card {
+            background: rgba(255,255,255,0.92);
+            border-radius: 20px;
+            padding: 40px;
+            width: 100%;
+            max-width: 440px;
+            text-align: center;
+            box-shadow: 0 25px 45px rgba(0,0,0,0.2);
+        }
+        .auth-card h1 { font-size: 1.4em; margin-bottom: 6px; }
+        .auth-card p { color: #64748b; margin-bottom: 18px; font-size: 0.9em; }
+        .qr-box { background: #fff; padding: 14px; border-radius: 14px; display: inline-block; margin-bottom: 18px; }
+        .qr-box img { display: block; width: 200px; height: 200px; }
+        .secret-box {
+            background: #f1f5f9; border-radius: 10px; padding: 12px; margin-bottom: 22px;
+            font-family: 'Courier New', monospace; font-size: 0.95em; letter-spacing: 0.1em;
+            word-break: break-all; color: #334155;
+        }
+        form { text-align: left; }
+        input#code {
+            width: 100%; padding: 14px; margin-bottom: 18px; border-radius: 10px;
+            border: 1px solid #cbd5e1; font-size: 1.4em; font-family: inherit;
+            letter-spacing: 0.4em; text-align: center;
+        }
+        input#code:focus { outline: none; border-color: #0ea5e9; }
+        button {
+            width: 100%; padding: 13px; border: none; border-radius: 10px;
+            background: linear-gradient(135deg, #0ea5e9, #7c3aed); color: #fff;
+            font-size: 1em; font-weight: 600; cursor: pointer; transition: filter 0.15s ease;
+        }
+        button:hover { filter: brightness(1.08); }
+        .error-box {
+            background: #fee2e2; color: #b91c1c; padding: 10px 14px; border-radius: 10px;
+            font-size: 0.85em; margin-bottom: 18px; text-align: left;
+        }
+        .back-link { display: block; text-align: center; margin-top: 18px; font-size: 0.85em; color: #94a3b8; text-decoration: none; }
+    </style>
+</head>
+<body>
+    <div class="auth-card">
+        <h1>🔐 Set up two-factor authentication</h1>
+        <p>Scan this QR code with your authenticator app (Google Authenticator, Authy, 1Password, etc), then enter the 6-digit code it shows to confirm.</p>
+
+        <div class="qr-box">
+            <img src="{{ qr_data_uri }}" alt="2FA QR code">
+        </div>
+
+        <p style="margin-bottom: 6px;">Can't scan? Enter this key manually:</p>
+        <div class="secret-box">{{ secret }}</div>
+
+        {% if error %}
+        <div class="error-box">{{ error }}</div>
+        {% endif %}
+
+        <form method="POST" action="/account/2fa/confirm">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="text" id="code" name="code" inputmode="numeric" pattern="[0-9]*"
+                   maxlength="6" autocomplete="one-time-code" required autofocus placeholder="000000">
+            <button type="submit">Confirm & Enable</button>
+        </form>
+        <a class="back-link" href="/account">← Cancel and go back</a>
+    </div>
+</body>
+</html>

@@ -1,9 +1,18 @@
 # Quick Aid - local/production compose setup.
 #
 # Usage:
-#   1. cp .env.example .env   (fill in real GEMINI_API_KEY and SECRET_KEY)
-#   2. docker compose up --build
-#   3. Open http://localhost:5000
+#   1. cp .env.example .env       (fill in real GEMINI_API_KEY and SECRET_KEY)
+#   2. ./nginx/generate-dev-certs.sh   (self-signed cert for local HTTPS -
+#      see the README's "TLS in production" section for real certs)
+#   3. docker compose up --build
+#   4. Open https://localhost (your browser will warn about the self-signed
+#      cert locally - that's expected)
+#
+# gunicorn (the `web` service) is HTTP-only and is NOT published to the
+# host - only `nginx` is, on 80/443. nginx terminates TLS and reverse-
+# proxies to `web` over the private compose network, and the app trusts
+# its X-Forwarded-* headers via BEHIND_PROXY=True (see app.py's ProxyFix
+# setup) to recover the real client IP/scheme.
 #
 # The SQLite database and logs persist across restarts/rebuilds via the
 # named volumes below - `docker compose down` alone won't lose your data;
@@ -12,12 +21,20 @@
 services:
   web:
     build: .
-    ports:
-      - "5000:5000"
+    # Not published to the host - only reachable from other containers on
+    # this compose network (i.e. nginx). Uncomment to reach gunicorn
+    # directly for local debugging, bypassing nginx/TLS:
+    #   ports:
+    #     - "127.0.0.1:5000:5000"
     env_file:
       - .env
     environment:
       PORT: "5000"
+      BEHIND_PROXY: "True"
+      # Overrides whatever's in .env - this path always sits behind nginx's
+      # TLS termination (see nginx/nginx.conf), unlike the plain
+      # `python app.py` Quick Start, which stays on plain HTTP.
+      SESSION_COOKIE_SECURE: "True"
     volumes:
       - quickaid-data:/app/data
       - quickaid-logs:/app/logs
@@ -29,6 +46,21 @@ services:
       retries: 3
     restart: unless-stopped
 
+  nginx:
+    image: nginx:1.27-alpine
+    depends_on:
+      web:
+        condition: service_healthy
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/certs:/etc/nginx/certs:ro
+      - certbot-www:/var/www/certbot:ro
+    restart: unless-stopped
+
 volumes:
   quickaid-data:
   quickaid-logs:
+  certbot-www:

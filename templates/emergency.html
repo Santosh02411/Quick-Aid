@@ -70,8 +70,11 @@
         </div>
         
         <div style="text-align: center; margin-top: 30px;">
-            <button class="btn-back" onclick="window.close()">← Back to Quick Aid</button>
+            <button class="btn-back" id="backBtn">← Back to Quick Aid</button>
         </div>
     </div>
+    <script nonce="{{ csp_nonce() }}">
+        document.getElementById('backBtn').addEventListener('click', () => window.close());
+    </script>
 </body>
 </html>

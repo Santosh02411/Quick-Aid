@@ -46,6 +46,17 @@
         .switch-link { text-align: center; margin-top: 20px; font-size: 0.9em; color: #64748b; }
         .switch-link a { color: #0ea5e9; text-decoration: none; font-weight: 600; }
         .back-link { display: block; text-align: center; margin-top: 14px; font-size: 0.85em; color: #94a3b8; text-decoration: none; }
+        .forgot-link { display: block; text-align: right; font-size: 0.82em; margin: -10px 0 18px; }
+        .forgot-link a { color: #0ea5e9; text-decoration: none; }
+        .divider { display: flex; align-items: center; gap: 10px; margin: 18px 0; color: #94a3b8; font-size: 0.8em; }
+        .divider::before, .divider::after { content: ''; flex: 1; height: 1px; background: #e2e8f0; }
+        .btn-google {
+            display: flex; align-items: center; justify-content: center; gap: 10px;
+            width: 100%; padding: 12px; border: 1px solid #cbd5e1; border-radius: 10px;
+            background: #fff; color: #334155; font-size: 0.92em; font-weight: 600;
+            text-decoration: none;
+        }
+        .btn-google:hover { background: #f8fafc; }
     </style>
 </head>
 <body>
@@ -58,14 +69,21 @@
         {% endif %}
 
         <form method="POST">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <label for="username">Username</label>
             <input type="text" id="username" name="username" required autofocus autocomplete="username">
 
             <label for="password">Password</label>
             <input type="password" id="password" name="password" required autocomplete="current-password">
+            <span class="forgot-link"><a href="/forgot-password">Forgot password?</a></span>
 
             <button type="submit">Log In</button>
         </form>
+
+        {% if google_oauth_enabled %}
+        <div class="divider">or</div>
+        <a class="btn-google" href="/login/google">Continue with Google</a>
+        {% endif %}
 
         <p class="switch-link">Don't have an account? <a href="/register">Sign up</a></p>
         <a class="back-link" href="/">← Back to Quick Aid</a>

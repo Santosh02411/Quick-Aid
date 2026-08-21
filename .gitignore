@@ -14,6 +14,10 @@ venv/
 uploads/*
 !uploads/.gitkeep
 
+# TLS certs/keys (generated locally or provisioned in production - never commit)
+nginx/certs/*
+!nginx/certs/.gitkeep
+
 # Database and logs (runtime data, not source)
 *.db
 logs/*

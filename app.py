@@ -1,8 +1,11 @@
-from flask import Flask, render_template, request, jsonify, redirect, url_for
+from flask import Flask, render_template, request, jsonify, redirect, url_for, g, session
 from flask_login import (
     LoginManager, login_user, logout_user, login_required, current_user
 )
+from flask_wtf import CSRFProtect
+from flask_wtf.csrf import CSRFError
 from werkzeug.exceptions import HTTPException
+from werkzeug.middleware.proxy_fix import ProxyFix
 import os
 import secrets
 import time
@@ -18,6 +21,9 @@ from dotenv import load_dotenv
 import database as db
 from auth import login_manager, User
 from logging_config import get_logger
+from mailer import send_email
+from two_factor import generate_secret, provisioning_uri, verify_code as verify_totp_code, qr_code_data_uri
+from oauth import init_oauth, oauth, is_google_oauth_configured
 import json
 import re
 
@@ -42,22 +48,96 @@ app.config['SECRET_KEY'] = _secret_key
 app.config['UPLOAD_FOLDER'] = 'uploads'
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
 
+# ---------------------------------------------------------------------------
+# Reverse proxy / TLS trust
+#
+# In production this app sits behind nginx (see docker-compose.yml), which
+# terminates TLS and forwards plain HTTP with X-Forwarded-* headers set.
+# ProxyFix is what makes Flask/Werkzeug trust exactly one hop of those
+# headers to recover the real client IP (request.remote_addr - used by
+# flask-limiter's rate limiting) and the original scheme (request.is_secure
+# - used below for secure cookies, and by url_for(..., _external=True) for
+# building https:// links in emails).
+#
+# This is opt-in via BEHIND_PROXY rather than always-on: trusting
+# X-Forwarded-* from just anyone lets a client spoof its own IP/scheme,
+# which would let it dodge rate limits or fake HTTPS. Only enable this when
+# something you control (nginx, a cloud load balancer) is actually the only
+# thing that can reach this process - which is exactly the case in the
+# provided docker-compose.yml (gunicorn isn't published to the host there).
+if os.getenv('BEHIND_PROXY', 'False').lower() in ('1', 'true', 'yes'):
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_port=1)
+    logger.info("BEHIND_PROXY enabled - trusting one hop of X-Forwarded-* headers.")
+
+# Cookies: HttpOnly (already Flask's default) so JS can't read the session
+# cookie, SameSite=Lax as a baseline CSRF/cross-site defense on top of the
+# CSRF tokens above, and Secure so the cookie is never sent over plain
+# HTTP. Secure defaults on since production should always be behind TLS
+# (see docker-compose.yml) - set SESSION_COOKIE_SECURE=False only for
+# plain-HTTP local dev (e.g. running `python app.py` directly, no nginx).
+app.config['SESSION_COOKIE_HTTPONLY'] = True
+app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
+app.config['SESSION_COOKIE_SECURE'] = os.getenv('SESSION_COOKIE_SECURE', 'False').lower() in ('1', 'true', 'yes')
+if not app.config['SESSION_COOKIE_SECURE']:
+    logger.info(
+        "SESSION_COOKIE_SECURE is off - fine for local plain-HTTP dev, but any "
+        "real deployment should set it True (docker-compose.yml already does)."
+    )
+
+# CSRF protection: every state-changing (POST) request must carry a valid
+# token, whether it comes from an HTML <form> (token as a hidden field) or
+# JS fetch() (token in the X-CSRFToken header, read from the <meta> tag
+# each template sets). Tests disable this via WTF_CSRF_ENABLED=False.
+app.config.setdefault('WTF_CSRF_ENABLED', True)
+csrf = CSRFProtect(app)
+
+
+# Endpoints hit by JS fetch() rather than a plain <form> submit - these
+# should get a JSON error body back instead of an HTML error page, since
+# the calling JS is expecting JSON either way.
+_JSON_CSRF_ENDPOINTS = {'/upload', '/analyze_symptoms', '/api/history/clear', '/api/history'}
+
+
+@app.errorhandler(CSRFError)
+def handle_csrf_error(e):
+    logger.info("CSRF validation failed on %s %s: %s", request.method, request.path, e.description)
+    if request.path in _JSON_CSRF_ENDPOINTS or request.path.startswith('/api/'):
+        return jsonify({'error': 'Your session has expired or is invalid. Please refresh the page and try again.'}), 400
+    return render_template('csrf_error.html', reason=e.description), 400
+
+
 # Flask-Login: authentication is required for the actual AI-analysis features
 # (upload / symptoms / history) since this is meant to be more than a public
 # demo. The landing page and emergency info stay public - safety information
 # should never be gated behind a login wall.
 login_manager.init_app(app)
 
+# Optional Google OAuth/SSO - only registers if GOOGLE_CLIENT_ID/SECRET are
+# set (see oauth.py); templates hide the "Continue with Google" button when
+# it isn't, so this is safe to always call.
+init_oauth(app)
+
 # Rate limiting: protects the Gemini-backed endpoints from abuse/quota burn,
 # and login/register from brute-force/enumeration attempts.
-# Uses in-memory storage by default (fine for a single dev/small deployment).
-# For multi-process production deployments, point storage_uri at Redis, e.g.:
-#   Limiter(..., storage_uri="redis://localhost:6379")
+# Storage backend is configurable via RATELIMIT_STORAGE_URI. Defaults to
+# in-memory, which is fine for a single dev process but does NOT share
+# limit state across multiple gunicorn workers/instances - each process
+# gets its own counters, so real limits end up (workers x configured limit).
+# For any multi-worker or multi-instance deployment, point this at Redis:
+#   RATELIMIT_STORAGE_URI=redis://localhost:6379
+# (requires the `redis` package - see requirements.txt)
+_ratelimit_storage_uri = os.getenv('RATELIMIT_STORAGE_URI', 'memory://')
+if _ratelimit_storage_uri == 'memory://':
+    logger.warning(
+        "Rate limiter using in-memory storage - limits are per-process only. "
+        "Set RATELIMIT_STORAGE_URI (e.g. to a Redis URL) before running with "
+        "more than one worker/instance."
+    )
 limiter = Limiter(
     key_func=get_remote_address,
     app=app,
     default_limits=["200 per day", "50 per hour"],
-    storage_uri="memory://"
+    storage_uri=_ratelimit_storage_uri
 )
 
 # Symptom text constraints
@@ -67,6 +147,15 @@ MIN_SYMPTOM_LENGTH = 3
 # Account constraints
 USERNAME_RE = re.compile(r'^[A-Za-z0-9_]{3,30}$')
 MIN_PASSWORD_LENGTH = 8
+
+# Token lifetimes
+PASSWORD_RESET_TTL_SECONDS = 60 * 60          # 1 hour
+EMAIL_VERIFY_TTL_SECONDS = 60 * 60 * 24       # 24 hours
+
+# Base URL used to build links in emails (password reset / verification).
+# Set APP_BASE_URL in .env for production (e.g. https://quickaid.example.com);
+# falls back to the incoming request's own host, which is fine for local dev.
+APP_BASE_URL = os.getenv('APP_BASE_URL', '').rstrip('/')
 
 # Signature (magic-byte) checks for the image formats we claim to support.
 # Verified against the actual file bytes, not just the filename extension.
@@ -109,6 +198,57 @@ def _log_request(response):
         "%s %s -> %s (%.1fms)",
         request.method, request.path, response.status_code, duration_ms
     )
+    return response
+
+
+# ---------------------------------------------------------------------------
+# Security response headers
+#
+# A per-request CSP nonce is generated once and exposed to templates as
+# csp_nonce() so the (few) legitimate inline <script> blocks can be
+# allow-listed individually instead of falling back to 'unsafe-inline'
+# for scripts. Inline <style> is still allowed via 'unsafe-inline' - the
+# templates use plenty of inline style="" attributes and CSP has no
+# nonce mechanism for style *attributes* (only <style> elements), so
+# locking that down would mean moving every inline style into a
+# stylesheet. Given styling can't execute arbitrary JS, that's a much
+# lower-value fix than a strict script-src and is left as a follow-up.
+# ---------------------------------------------------------------------------
+
+@app.before_request
+def _set_csp_nonce():
+    g.csp_nonce = secrets.token_urlsafe(16)
+
+
+app.jinja_env.globals['csp_nonce'] = lambda: g.csp_nonce
+
+_CSP_DIRECTIVES = (
+    "default-src 'self'; "
+    "script-src 'self' https://unpkg.com 'nonce-{nonce}'; "
+    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com "
+    "https://cdnjs.cloudflare.com https://unpkg.com; "
+    "font-src 'self' https://fonts.gstatic.com https://cdnjs.cloudflare.com; "
+    "img-src 'self' data:; "
+    "connect-src 'self'; "
+    "object-src 'none'; "
+    "base-uri 'self'; "
+    "form-action 'self'; "
+    "frame-ancestors 'none'"
+)
+
+
+@app.after_request
+def _set_security_headers(response):
+    response.headers['Content-Security-Policy'] = _CSP_DIRECTIVES.format(nonce=g.get('csp_nonce', ''))
+    response.headers['X-Content-Type-Options'] = 'nosniff'
+    response.headers['X-Frame-Options'] = 'DENY'
+    response.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
+    response.headers['Permissions-Policy'] = (
+        'camera=(), microphone=(), geolocation=(), payment=(), usb=()'
+    )
+    # Browsers only honor HSTS on actual HTTPS responses, so it's safe to
+    # always set it - it's simply ignored over plain HTTP (e.g. local dev).
+    response.headers['Strict-Transport-Security'] = 'max-age=63072000; includeSubDomains'
     return response
 
 
@@ -162,6 +302,32 @@ def validate_image_file(filepath, extension):
     return True, None
 
 
+def is_valid_email(email):
+    return bool(email) and '@' in email and '.' in email.split('@')[-1]
+
+
+def build_absolute_url(path):
+    """Build a link to include in an email. Uses APP_BASE_URL if it's set
+    (recommended for production so links are correct behind a proxy/CDN);
+    otherwise falls back to the current request's own host."""
+    base = APP_BASE_URL or request.host_url.rstrip('/')
+    return f"{base}{path}"
+
+
+def generate_username_from_email(email):
+    """Derive a valid, available username for a first-time OAuth sign-in,
+    e.g. 'jane.doe+test@x.com' -> 'jane_doe' (with a random suffix appended
+    if that's already taken)."""
+    local_part = email.split('@')[0]
+    base = re.sub(r'[^A-Za-z0-9_]', '_', local_part).strip('_')[:24] or 'user'
+    if len(base) < 3:
+        base = (base + '_user')[:24]
+    candidate = base
+    while db.username_taken(candidate):
+        candidate = f"{base}_{secrets.token_hex(3)}"[:30]
+    return candidate
+
+
 # ---------------------------------------------------------------------------
 # Public routes
 # ---------------------------------------------------------------------------
@@ -198,6 +364,27 @@ def health():
 # Auth routes
 # ---------------------------------------------------------------------------
 
+def _send_verification_email(user_row):
+    token = db.create_token(user_row['id'], 'email_verify', EMAIL_VERIFY_TTL_SECONDS)
+    link = build_absolute_url(url_for('verify_email', token=token))
+    send_email(
+        user_row['email'],
+        'Verify your Quick Aid email address',
+        f"Hi {user_row['username']},\n\n"
+        f"Please confirm your email address by visiting the link below "
+        f"(valid for 24 hours):\n\n{link}\n\n"
+        f"If you didn't create a Quick Aid account, you can ignore this email."
+    )
+
+
+def _safe_next_path(next_page):
+    """Only follow `next` if it's a safe, local, relative path - never
+    redirect off-site based on unvalidated user input."""
+    if next_page and next_page.startswith('/') and not next_page.startswith('//'):
+        return next_page
+    return None
+
+
 @app.route('/register', methods=['GET', 'POST'])
 @limiter.limit("5 per minute")
 def register():
@@ -205,33 +392,36 @@ def register():
         return redirect(url_for('index'))
 
     if request.method == 'GET':
-        return render_template('register.html')
+        return render_template('register.html', google_oauth_enabled=is_google_oauth_configured())
 
     username = (request.form.get('username') or '').strip()
     email = (request.form.get('email') or '').strip().lower()
     password = request.form.get('password') or ''
+    ctx = {'google_oauth_enabled': is_google_oauth_configured()}
 
     if not username or not email or not password:
-        return render_template('register.html', error='All fields are required.'), 400
+        return render_template('register.html', error='All fields are required.', **ctx), 400
 
     if not USERNAME_RE.match(username):
         return render_template(
             'register.html',
-            error='Username must be 3-30 characters: letters, numbers, underscores only.'
+            error='Username must be 3-30 characters: letters, numbers, underscores only.', **ctx
         ), 400
 
-    if '@' not in email or '.' not in email.split('@')[-1]:
-        return render_template('register.html', error='Please enter a valid email address.'), 400
+    if not is_valid_email(email):
+        return render_template('register.html', error='Please enter a valid email address.', **ctx), 400
 
     if len(password) < MIN_PASSWORD_LENGTH:
         return render_template(
             'register.html',
-            error=f'Password must be at least {MIN_PASSWORD_LENGTH} characters.'
+            error=f'Password must be at least {MIN_PASSWORD_LENGTH} characters.', **ctx
         ), 400
 
     user_row = db.create_user(username, email, password)
     if user_row is None:
-        return render_template('register.html', error='That username or email is already taken.'), 409
+        return render_template('register.html', error='That username or email is already taken.', **ctx), 409
+
+    _send_verification_email(user_row)
 
     user = User.from_row(user_row)
     login_user(user)
@@ -246,25 +436,60 @@ def login():
         return redirect(url_for('index'))
 
     if request.method == 'GET':
-        return render_template('login.html')
+        return render_template('login.html', google_oauth_enabled=is_google_oauth_configured())
 
     username = (request.form.get('username') or '').strip()
     password = request.form.get('password') or ''
 
     user_row = db.get_user_by_username(username)
     if user_row and db.verify_password(user_row, password):
+        next_page = _safe_next_path(request.args.get('next'))
+
+        if user_row['totp_enabled']:
+            # Password is correct but a second factor is required - don't
+            # log the session in yet, hand off to the 2FA challenge instead.
+            session['pending_2fa_user_id'] = user_row['id']
+            session['pending_2fa_next'] = next_page
+            logger.info("Password verified for %s, awaiting 2FA code", username)
+            return redirect(url_for('login_2fa'))
+
         user = User.from_row(user_row)
         login_user(user)
         logger.info("User logged in: %s", username)
-        next_page = request.args.get('next')
-        # Only follow next if it's a safe, local, relative path -
-        # never redirect off-site based on unvalidated user input.
-        if next_page and next_page.startswith('/') and not next_page.startswith('//'):
-            return redirect(next_page)
-        return redirect(url_for('index'))
+        return redirect(next_page or url_for('index'))
 
     logger.info("Failed login attempt for username: %s", username)
-    return render_template('login.html', error='Invalid username or password.'), 401
+    return render_template(
+        'login.html', error='Invalid username or password.',
+        google_oauth_enabled=is_google_oauth_configured()
+    ), 401
+
+
+@app.route('/login/2fa', methods=['GET', 'POST'])
+@limiter.limit("10 per minute")
+def login_2fa():
+    """Second step of login for accounts with 2FA enabled - reached only
+    after a correct username/password on the /login form."""
+    pending_user_id = session.get('pending_2fa_user_id')
+    if not pending_user_id:
+        return redirect(url_for('login'))
+
+    if request.method == 'GET':
+        return render_template('login_2fa.html')
+
+    code = (request.form.get('code') or '').strip()
+    user_row = db.get_user_by_id(pending_user_id)
+
+    if user_row and user_row['totp_enabled'] and verify_totp_code(user_row['totp_secret'], code):
+        session.pop('pending_2fa_user_id', None)
+        next_page = session.pop('pending_2fa_next', None)
+        user = User.from_row(user_row)
+        login_user(user)
+        logger.info("2FA code accepted, user logged in: %s", user_row['username'])
+        return redirect(next_page or url_for('index'))
+
+    logger.info("Invalid 2FA code for pending user_id=%s", pending_user_id)
+    return render_template('login_2fa.html', error='Invalid or expired code. Please try again.'), 401
 
 
 @app.route('/logout', methods=['POST'])
@@ -273,6 +498,326 @@ def logout():
     logger.info("User logged out: %s", current_user.username)
     logout_user()
     return redirect(url_for('index'))
+
+
+# ---------------------------------------------------------------------------
+# Password reset
+# ---------------------------------------------------------------------------
+
+@app.route('/forgot-password', methods=['GET', 'POST'])
+@limiter.limit("5 per minute")
+def forgot_password():
+    if request.method == 'GET':
+        return render_template('forgot_password.html')
+
+    email = (request.form.get('email') or '').strip().lower()
+    if is_valid_email(email):
+        user_row = db.get_user_by_email(email)
+        if user_row:
+            token = db.create_token(user_row['id'], 'password_reset', PASSWORD_RESET_TTL_SECONDS)
+            link = build_absolute_url(url_for('reset_password', token=token))
+            send_email(
+                user_row['email'],
+                'Reset your Quick Aid password',
+                f"Hi {user_row['username']},\n\n"
+                f"Someone requested a password reset for your Quick Aid account. "
+                f"If this was you, click the link below (valid for 1 hour):\n\n{link}\n\n"
+                f"If you didn't request this, you can safely ignore this email - "
+                f"your password won't change."
+            )
+        else:
+            logger.info("Password reset requested for unknown email")
+    # Always show the same message whether or not the email exists, so this
+    # endpoint can't be used to enumerate registered accounts.
+    return render_template(
+        'forgot_password.html',
+        message="If an account exists for that email, we've sent a password reset link."
+    )
+
+
+@app.route('/reset-password/<token>', methods=['GET', 'POST'])
+@limiter.limit("10 per minute")
+def reset_password(token):
+    token_row = db.get_valid_token(token, 'password_reset')
+    if not token_row:
+        return render_template('reset_password.html', invalid=True), 400
+
+    if request.method == 'GET':
+        return render_template('reset_password.html', token=token)
+
+    password = request.form.get('password') or ''
+    confirm = request.form.get('confirm_password') or ''
+
+    if len(password) < MIN_PASSWORD_LENGTH:
+        return render_template(
+            'reset_password.html', token=token,
+            error=f'Password must be at least {MIN_PASSWORD_LENGTH} characters.'
+        ), 400
+    if password != confirm:
+        return render_template('reset_password.html', token=token, error='Passwords do not match.'), 400
+
+    # Re-check validity right before committing (belt-and-suspenders against
+    # a token expiring or being used elsewhere between GET and this POST).
+    token_row = db.get_valid_token(token, 'password_reset')
+    if not token_row:
+        return render_template('reset_password.html', invalid=True), 400
+
+    db.set_password(token_row['user_id'], password)
+    db.consume_token(token_row['id'])
+    logger.info("Password reset completed for user_id=%s", token_row['user_id'])
+    return render_template('reset_password.html', done=True)
+
+
+@app.route('/verify-email/<token>')
+@limiter.limit("20 per minute")
+def verify_email(token):
+    token_row = db.get_valid_token(token, 'email_verify')
+    if not token_row:
+        return render_template('verify_email.html', invalid=True), 400
+
+    db.set_email_verified(token_row['user_id'])
+    db.consume_token(token_row['id'])
+    logger.info("Email verified for user_id=%s", token_row['user_id'])
+    return render_template('verify_email.html', done=True)
+
+
+# ---------------------------------------------------------------------------
+# Google OAuth / SSO
+# ---------------------------------------------------------------------------
+
+@app.route('/login/google')
+@limiter.limit("15 per minute")
+def login_google():
+    if not is_google_oauth_configured():
+        return render_template('login.html', error='Google sign-in is not configured on this server.'), 503
+    redirect_uri = build_absolute_url(url_for('login_google_callback'))
+    return oauth.google.authorize_redirect(redirect_uri)
+
+
+@app.route('/login/google/callback')
+@limiter.limit("15 per minute")
+def login_google_callback():
+    if not is_google_oauth_configured():
+        return redirect(url_for('login'))
+
+    try:
+        token = oauth.google.authorize_access_token()
+    except Exception:
+        logger.error("Google OAuth callback failed", exc_info=True)
+        return render_template('login.html', error='Google sign-in failed. Please try again.'), 400
+
+    userinfo = token.get('userinfo')
+    if not userinfo:
+        logger.error("Google OAuth callback returned no userinfo/id_token")
+        return render_template('login.html', error='Google sign-in failed. Please try again.'), 400
+
+    sub = userinfo.get('sub')
+    email = (userinfo.get('email') or '').strip().lower()
+    email_verified = bool(userinfo.get('email_verified'))
+
+    if not sub or not email or not email_verified:
+        return render_template(
+            'login.html',
+            error='Your Google account must have a verified email to sign in this way.'
+        ), 400
+
+    user_row = db.get_user_by_oauth('google', sub)
+
+    if not user_row:
+        # First time seeing this Google account - link it to an existing
+        # local account with the same (verified) email, or create a new one.
+        existing = db.get_user_by_email(email)
+        if existing:
+            db.link_oauth_to_user(existing['id'], 'google', sub)
+            user_row = db.get_user_by_id(existing['id'])
+        else:
+            username = generate_username_from_email(email)
+            user_row = db.create_oauth_user(username, email, 'google', sub)
+            if user_row is None:
+                return render_template('login.html', error='Could not create your account. Please try again.'), 409
+
+    user = User.from_row(user_row)
+    login_user(user)
+    logger.info("User logged in via Google OAuth: %s", user_row['username'])
+    return redirect(url_for('index'))
+
+
+# ---------------------------------------------------------------------------
+# Account settings
+# ---------------------------------------------------------------------------
+
+@app.route('/account')
+@login_required
+def account():
+    user_row = db.get_user_by_id(int(current_user.id))
+    return render_template('account.html', account_user=user_row)
+
+
+@app.route('/account/profile', methods=['POST'])
+@login_required
+@limiter.limit("10 per minute")
+def update_profile():
+    user_id = int(current_user.id)
+    user_row = db.get_user_by_id(user_id)
+
+    username = (request.form.get('username') or '').strip()
+    email = (request.form.get('email') or '').strip().lower()
+    current_password = request.form.get('current_password') or ''
+
+    if not USERNAME_RE.match(username):
+        return _account_error('Username must be 3-30 characters: letters, numbers, underscores only.')
+    if not is_valid_email(email):
+        return _account_error('Please enter a valid email address.')
+
+    # Accounts that have a real password must confirm it before changing
+    # profile details - OAuth-only accounts have none to confirm.
+    if user_row['has_password'] and not db.verify_password(user_row, current_password):
+        return _account_error('Current password is incorrect.')
+
+    if username != user_row['username'] and db.username_taken(username, exclude_user_id=user_id):
+        return _account_error('That username is already taken.')
+    if email != user_row['email'] and db.email_taken(email, exclude_user_id=user_id):
+        return _account_error('That email is already in use.')
+
+    if username != user_row['username']:
+        db.update_username(user_id, username)
+    email_changed = email != user_row['email']
+    if email_changed:
+        db.update_email(user_id, email)
+
+    updated_row = db.get_user_by_id(user_id)
+    if email_changed:
+        _send_verification_email(updated_row)
+
+    logger.info("Profile updated for user_id=%s", user_id)
+    return render_template('account.html', account_user=updated_row, success='Profile updated.')
+
+
+@app.route('/account/password', methods=['POST'])
+@login_required
+@limiter.limit("5 per minute")
+def update_password():
+    user_id = int(current_user.id)
+    user_row = db.get_user_by_id(user_id)
+
+    current_password = request.form.get('current_password') or ''
+    new_password = request.form.get('new_password') or ''
+    confirm_password = request.form.get('confirm_password') or ''
+
+    if user_row['has_password'] and not db.verify_password(user_row, current_password):
+        return _account_error('Current password is incorrect.')
+    if len(new_password) < MIN_PASSWORD_LENGTH:
+        return _account_error(f'New password must be at least {MIN_PASSWORD_LENGTH} characters.')
+    if new_password != confirm_password:
+        return _account_error('New passwords do not match.')
+
+    db.set_password(user_id, new_password)
+    logger.info("Password changed for user_id=%s", user_id)
+    return render_template(
+        'account.html', account_user=db.get_user_by_id(user_id),
+        success='Password updated.'
+    )
+
+
+@app.route('/account/resend-verification', methods=['POST'])
+@login_required
+@limiter.limit("3 per minute")
+def resend_verification():
+    user_row = db.get_user_by_id(int(current_user.id))
+    if user_row['email_verified']:
+        return render_template('account.html', account_user=user_row, success='Your email is already verified.')
+    _send_verification_email(user_row)
+    logger.info("Verification email resent for user_id=%s", user_row['id'])
+    return render_template('account.html', account_user=user_row, success='Verification email sent.')
+
+
+@app.route('/account/delete', methods=['POST'])
+@login_required
+@limiter.limit("5 per minute")
+def delete_account():
+    user_id = int(current_user.id)
+    user_row = db.get_user_by_id(user_id)
+    current_password = request.form.get('current_password') or ''
+    confirm_text = (request.form.get('confirm_text') or '').strip()
+
+    if user_row['has_password'] and not db.verify_password(user_row, current_password):
+        return _account_error('Current password is incorrect.')
+    if confirm_text.upper() != 'DELETE':
+        return _account_error('Type DELETE to confirm account deletion.')
+
+    username = user_row['username']
+    logout_user()
+    session.clear()
+    db.delete_user(user_id)
+    logger.info("Account deleted: user_id=%s username=%s", user_id, username)
+    return redirect(url_for('index'))
+
+
+@app.route('/account/2fa/setup')
+@login_required
+def setup_2fa():
+    user_row = db.get_user_by_id(int(current_user.id))
+    if user_row['totp_enabled']:
+        return redirect(url_for('account'))
+
+    secret = generate_secret()
+    session['pending_totp_secret'] = secret
+    uri = provisioning_uri(secret, user_row['email'])
+    qr_data_uri = qr_code_data_uri(uri)
+    return render_template('setup_2fa.html', secret=secret, qr_data_uri=qr_data_uri)
+
+
+@app.route('/account/2fa/confirm', methods=['POST'])
+@login_required
+@limiter.limit("10 per minute")
+def confirm_2fa():
+    secret = session.get('pending_totp_secret')
+    code = (request.form.get('code') or '').strip()
+
+    if not secret:
+        return redirect(url_for('setup_2fa'))
+
+    if not verify_totp_code(secret, code):
+        user_row = db.get_user_by_id(int(current_user.id))
+        uri = provisioning_uri(secret, user_row['email'])
+        return render_template(
+            'setup_2fa.html', secret=secret, qr_data_uri=qr_code_data_uri(uri),
+            error='Incorrect code. Please try again.'
+        ), 400
+
+    user_id = int(current_user.id)
+    db.set_pending_totp_secret(user_id, secret)
+    db.enable_totp(user_id)
+    session.pop('pending_totp_secret', None)
+    logger.info("2FA enabled for user_id=%s", user_id)
+    return render_template(
+        'account.html', account_user=db.get_user_by_id(user_id),
+        success='Two-factor authentication is now enabled.'
+    )
+
+
+@app.route('/account/2fa/disable', methods=['POST'])
+@login_required
+@limiter.limit("5 per minute")
+def disable_2fa():
+    user_id = int(current_user.id)
+    user_row = db.get_user_by_id(user_id)
+    current_password = request.form.get('current_password') or ''
+
+    if user_row['has_password'] and not db.verify_password(user_row, current_password):
+        return _account_error('Current password is incorrect.')
+
+    db.disable_totp(user_id)
+    logger.info("2FA disabled for user_id=%s", user_id)
+    return render_template(
+        'account.html', account_user=db.get_user_by_id(user_id),
+        success='Two-factor authentication has been disabled.'
+    )
+
+
+def _account_error(message):
+    user_row = db.get_user_by_id(int(current_user.id))
+    return render_template('account.html', account_user=user_row, error=message), 400
 
 
 # ---------------------------------------------------------------------------

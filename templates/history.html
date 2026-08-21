@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>History - Quick Aid</title>
+    <meta name="csrf-token" content="{{ csrf_token() }}">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -48,7 +49,7 @@
             <div class="header-actions">
                 <a class="btn" href="/">← Back to Quick Aid</a>
                 {% if entries %}
-                <button class="btn btn-danger" onclick="clearHistory()">Clear History</button>
+                <button class="btn btn-danger" id="clearHistoryBtn">Clear History</button>
                 {% endif %}
             </div>
         </div>
@@ -89,11 +90,16 @@
         {% endif %}
     </div>
 
-    <script>
+    <script nonce="{{ csp_nonce() }}">
+        const CSRF_TOKEN = document.querySelector('meta[name="csrf-token"]').content;
+
         async function clearHistory() {
             if (!confirm('Clear all your saved history? This cannot be undone.')) return;
             try {
-                const res = await fetch('/api/history/clear', { method: 'POST' });
+                const res = await fetch('/api/history/clear', {
+                    method: 'POST',
+                    headers: {'X-CSRFToken': CSRF_TOKEN}
+                });
                 if (res.ok) {
                     window.location.reload();
                 } else {
@@ -102,6 +108,11 @@
             } catch (err) {
                 alert('Could not clear history. Please try again.');
             }
+        }
+
+        const clearHistoryBtn = document.getElementById('clearHistoryBtn');
+        if (clearHistoryBtn) {
+            clearHistoryBtn.addEventListener('click', clearHistory);
         }
     </script>
 </body>

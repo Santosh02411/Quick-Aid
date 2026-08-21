@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Quick Aid - AI Medical Assistant</title>
+    <meta name="csrf-token" content="{{ csrf_token() }}">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
     <link href="https://unpkg.com/aos@2.3.1/dist/aos.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
@@ -524,7 +525,8 @@
                 <li><a href="#emergency">Emergency</a></li>
                 {% if current_user.is_authenticated %}
                 <li><a href="/history">History</a></li>
-                <li><a href="#" onclick="document.getElementById('logout-form').submit(); return false;">Logout ({{ current_user.username }})</a></li>
+                <li><a href="/account">Account</a></li>
+                <li><a href="#" id="logoutLink">Logout ({{ current_user.username }})</a></li>
                 {% else %}
                 <li><a href="/login">Log In</a></li>
                 <li><a href="/register">Sign Up</a></li>
@@ -532,7 +534,9 @@
             </ul>
         </div>
     </nav>
-    <form id="logout-form" action="/logout" method="POST" style="display:none;"></form>
+    <form id="logout-form" action="/logout" method="POST" style="display:none;">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    </form>
     <div class="container">
         <div class="main-content">
             <!-- Hero Section -->
@@ -587,7 +591,7 @@
             </div>
 <!-- Emergency Button -->
             <div class="emergency-section" data-aos="zoom-in" data-aos-delay="500">
-                <button class="btn btn-emergency" onclick="window.open('tel:+91108', '_blank')" style="font-size: 1.3rem; padding: 20px 40px;">
+                <button class="btn btn-emergency" id="emergencyCallBtn" style="font-size: 1.3rem; padding: 20px 40px;">
                     <i class="fas fa-exclamation-triangle"></i> 🚨 Emergency - Call 108 Now
                 </button>
             </div>
@@ -613,14 +617,34 @@
             </div>
         </footer>
     </div>
- <script src="https://unpkg.com/aos@2.3.1/dist/aos.js"></script>
-    <script>
+ <script src="https://unpkg.com/aos@2.3.1/dist/aos.js" nonce="{{ csp_nonce() }}"></script>
+    <script nonce="{{ csp_nonce() }}">
+        // CSRF token for JS-driven POST requests (forms carry their own
+        // hidden field; fetch() calls send it via this header instead).
+        const CSRF_TOKEN = document.querySelector('meta[name="csrf-token"]').content;
+
         // Initialize AOS
         AOS.init({
             duration: 1000,
             once: true,
             offset: 100
         });
+
+        // Logout link and emergency-call button: moved out of onclick=""
+        // attributes so inline event handlers aren't needed (CSP script-src
+        // has no 'unsafe-inline'/'unsafe-hashes', which would otherwise
+        // block them).
+        const logoutLink = document.getElementById('logoutLink');
+        if (logoutLink) {
+            logoutLink.addEventListener('click', (e) => {
+                e.preventDefault();
+                document.getElementById('logout-form').submit();
+            });
+        }
+        const emergencyCallBtn = document.getElementById('emergencyCallBtn');
+        if (emergencyCallBtn) {
+            emergencyCallBtn.addEventListener('click', () => window.open('tel:+91108', '_blank'));
+        }
  // Create floating particles
         function createParticles() {
             const particles = document.getElementById('particles');
@@ -702,6 +726,7 @@ function handleFileSelect(file) {
             try {
                 const response = await fetch('/upload', {
                     method: 'POST',
+                    headers: {'X-CSRFToken': CSRF_TOKEN},
                     body: formData
                 });
 
@@ -770,7 +795,7 @@ function handleFileSelect(file) {
             try {
                 const response = await fetch('/analyze_symptoms', {
                     method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
+                    headers: {'Content-Type': 'application/json', 'X-CSRFToken': CSRF_TOKEN},
                     body: JSON.stringify({symptoms: symptoms})
                 });
 

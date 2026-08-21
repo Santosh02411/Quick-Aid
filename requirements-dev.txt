@@ -1,3 +1,6 @@
 -r requirements.txt
 pytest==8.3.3
 pytest-mock==3.14.0
+
+# Dependency vulnerability scanning (run: pip-audit -r requirements.txt)
+pip-audit==2.7.3

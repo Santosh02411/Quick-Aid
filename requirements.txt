@@ -1,11 +1,23 @@
-flask==2.3.3
+flask==3.1.3
 flask-login==0.6.3
 flask-limiter==3.5.0
-pillow==10.0.1
+flask-wtf==1.2.1
+pillow==12.3.0
 numpy==2.1.3
-requests==2.31.0
-werkzeug==2.3.7
-python-dotenv==1.0.0
+requests==2.34.2
+werkzeug==3.1.8
+python-dotenv==1.2.3
 google-genai==2.18.1
 pydantic==2.13.4
-gunicorn==21.2.0
+gunicorn==23.0.0
+
+# Account features: password reset / email verification tokens use the
+# stdlib (hashlib/secrets) - no extra dependency. These three cover
+# TOTP two-factor auth and optional Google OAuth/SSO.
+pyotp==2.9.0
+qrcode[pil]==7.4.2
+authlib==1.7.2
+
+# Optional: only needed if RATELIMIT_STORAGE_URI is pointed at Redis for
+# multi-worker/multi-instance rate limiting (see .env.example).
+redis==5.0.8

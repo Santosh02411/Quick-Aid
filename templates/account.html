@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Account Settings - Quick Aid</title>
+    <meta name="csrf-token" content="{{ csrf_token() }}">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Inter', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 40px 20px;
+            color: #0f172a;
+        }
+        .wrap { max-width: 640px; margin: 0 auto; }
+        .top-link { display: inline-block; color: #fff; text-decoration: none; margin-bottom: 20px; font-weight: 600; opacity: 0.9; }
+        .top-link:hover { opacity: 1; }
+        h1.page-title { color: #fff; font-size: 1.8em; margin-bottom: 24px; }
+        .card {
+            background: rgba(255,255,255,0.94);
+            border-radius: 18px;
+            padding: 28px;
+            margin-bottom: 22px;
+            box-shadow: 0 15px 35px rgba(0,0,0,0.15);
+        }
+        .card h2 { font-size: 1.15em; margin-bottom: 4px; }
+        .card .card-desc { color: #64748b; font-size: 0.85em; margin-bottom: 18px; }
+        label { display: block; font-size: 0.85em; font-weight: 600; margin-bottom: 6px; color: #334155; }
+        input {
+            width: 100%; padding: 11px 14px; margin-bottom: 16px; border-radius: 10px;
+            border: 1px solid #cbd5e1; font-size: 0.95em; font-family: inherit;
+        }
+        input:focus { outline: none; border-color: #0ea5e9; }
+        button, .btn {
+            padding: 11px 20px; border: none; border-radius: 10px;
+            background: linear-gradient(135deg, #0ea5e9, #7c3aed); color: #fff;
+            font-size: 0.9em; font-weight: 600; cursor: pointer; transition: filter 0.15s ease;
+            display: inline-block; text-decoration: none;
+        }
+        button:hover, .btn:hover { filter: brightness(1.08); }
+        .btn-danger { background: linear-gradient(135deg, #ef4444, #b91c1c); }
+        .btn-secondary { background: #e2e8f0; color: #334155; }
+        .badge {
+            display: inline-block; padding: 3px 10px; border-radius: 999px; font-size: 0.75em; font-weight: 700;
+        }
+        .badge-ok { background: #dcfce7; color: #166534; }
+        .badge-warn { background: #fef9c3; color: #854d0e; }
+        .row { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+        .error-box {
+            background: #fee2e2; color: #b91c1c; padding: 10px 14px; border-radius: 10px;
+            font-size: 0.85em; margin-bottom: 18px;
+        }
+        .success-box {
+            background: #dcfce7; color: #166534; padding: 10px 14px; border-radius: 10px;
+            font-size: 0.85em; margin-bottom: 18px;
+        }
+        .danger-zone { border: 1px solid #fecaca; }
+        .danger-zone h2 { color: #b91c1c; }
+        small.hint { display: block; color: #94a3b8; font-size: 0.8em; margin: -10px 0 16px; }
+    </style>
+</head>
+<body>
+    <div class="wrap">
+        <a class="top-link" href="/">← Back to Quick Aid</a>
+        <h1 class="page-title">Account Settings</h1>
+
+        {% if error %}<div class="error-box">{{ error }}</div>{% endif %}
+        {% if success %}<div class="success-box">{{ success }}</div>{% endif %}
+
+        <!-- Profile -->
+        <div class="card">
+            <h2>Profile</h2>
+            <p class="card-desc">Update your username or email address.</p>
+            <form method="POST" action="/account/profile">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <label for="username">Username</label>
+                <input type="text" id="username" name="username" value="{{ account_user.username }}" required pattern="[A-Za-z0-9_]{3,30}">
+
+                <label for="email">Email
+                    {% if account_user.email_verified %}
+                        <span class="badge badge-ok">Verified</span>
+                    {% else %}
+                        <span class="badge badge-warn">Not verified</span>
+                    {% endif %}
+                </label>
+                <input type="email" id="email" name="email" value="{{ account_user.email }}" required>
+
+                {% if account_user.has_password %}
+                <label for="profile_current_password">Current Password <small style="font-weight:400;color:#94a3b8;">(to confirm changes)</small></label>
+                <input type="password" id="profile_current_password" name="current_password" autocomplete="current-password">
+                {% endif %}
+
+                <button type="submit">Save Profile</button>
+            </form>
+            {% if not account_user.email_verified %}
+            <form method="POST" action="/account/resend-verification" style="margin-top: 12px;">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button type="submit" class="btn-secondary">Resend Verification Email</button>
+            </form>
+            {% endif %}
+        </div>
+
+        <!-- Password -->
+        <div class="card">
+            <h2>{{ 'Change Password' if account_user.has_password else 'Set a Password' }}</h2>
+            <p class="card-desc">
+                {% if account_user.has_password %}
+                    Choose a new password for your account.
+                {% else %}
+                    Your account currently signs in via Google only. Set a password to also allow signing in directly.
+                {% endif %}
+            </p>
+            <form method="POST" action="/account/password">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                {% if account_user.has_password %}
+                <label for="current_password">Current Password</label>
+                <input type="password" id="current_password" name="current_password" required autocomplete="current-password">
+                {% endif %}
+                <label for="new_password">New Password</label>
+                <input type="password" id="new_password" name="new_password" required minlength="8" autocomplete="new-password">
+                <label for="confirm_password">Confirm New Password</label>
+                <input type="password" id="confirm_password" name="confirm_password" required minlength="8" autocomplete="new-password">
+                <button type="submit">{{ 'Update Password' if account_user.has_password else 'Set Password' }}</button>
+            </form>
+        </div>
+
+        <!-- Two-factor authentication -->
+        <div class="card">
+            <h2>Two-Factor Authentication</h2>
+            <p class="card-desc">Add an extra layer of security with an authenticator app.</p>
+            <div class="row">
+                {% if account_user.totp_enabled %}
+                    <span class="badge badge-ok">Enabled</span>
+                {% else %}
+                    <span class="badge badge-warn">Not enabled</span>
+                {% endif %}
+            </div>
+            {% if account_user.totp_enabled %}
+            <form method="POST" action="/account/2fa/disable" style="margin-top: 14px;" id="disable-2fa-form">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                {% if account_user.has_password %}
+                <label for="disable_2fa_password">Current Password</label>
+                <input type="password" id="disable_2fa_password" name="current_password" required autocomplete="current-password">
+                {% endif %}
+                <button type="submit" class="btn-danger">Disable Two-Factor Authentication</button>
+            </form>
+            {% else %}
+            <a class="btn" href="/account/2fa/setup" style="margin-top: 14px;">Set Up Two-Factor Authentication</a>
+            {% endif %}
+        </div>
+
+        <!-- Connected accounts -->
+        {% if account_user.oauth_provider %}
+        <div class="card">
+            <h2>Connected Accounts</h2>
+            <p class="card-desc">External accounts linked for sign-in.</p>
+            <span class="badge badge-ok">Google connected</span>
+        </div>
+        {% endif %}
+
+        <!-- Danger zone -->
+        <div class="card danger-zone">
+            <h2>Delete Account</h2>
+            <p class="card-desc">Permanently deletes your account and all saved history. This cannot be undone.</p>
+            <form method="POST" action="/account/delete" id="delete-account-form">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                {% if account_user.has_password %}
+                <label for="delete_current_password">Current Password</label>
+                <input type="password" id="delete_current_password" name="current_password" required autocomplete="current-password">
+                {% endif %}
+                <label for="confirm_text">Type <strong>DELETE</strong> to confirm</label>
+                <input type="text" id="confirm_text" name="confirm_text" required placeholder="DELETE">
+                <small class="hint">Deletes your profile and all image/symptom history immediately.</small>
+                <button type="submit" class="btn-danger">Permanently Delete My Account</button>
+            </form>
+        </div>
+    </div>
+
+    <script nonce="{{ csp_nonce() }}">
+        const deleteForm = document.getElementById('delete-account-form');
+        if (deleteForm) {
+            deleteForm.addEventListener('submit', (e) => {
+                if (!confirm('This will permanently delete your account and all history. This cannot be undone. Continue?')) {
+                    e.preventDefault();
+                }
+            });
+        }
+        const disable2faForm = document.getElementById('disable-2fa-form');
+        if (disable2faForm) {
+            disable2faForm.addEventListener('submit', (e) => {
+                if (!confirm('Disable two-factor authentication for your account?')) {
+                    e.preventDefault();
+                }
+            });
+        }
+    </script>
+</body>
+</html>

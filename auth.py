@@ -19,17 +19,28 @@ login_manager.login_message_category = 'info'
 
 
 class User(UserMixin):
-    def __init__(self, id, username, email):
+    def __init__(self, id, username, email, email_verified=False, has_password=True,
+                 totp_enabled=False, oauth_provider=None):
         # Flask-Login expects get_id() to return a string.
         self.id = str(id)
         self.username = username
         self.email = email
+        self.email_verified = bool(email_verified)
+        self.has_password = bool(has_password)
+        self.totp_enabled = bool(totp_enabled)
+        self.oauth_provider = oauth_provider
 
     @staticmethod
     def from_row(row):
         if not row:
             return None
-        return User(row['id'], row['username'], row['email'])
+        return User(
+            row['id'], row['username'], row['email'],
+            email_verified=row.get('email_verified', 0) if isinstance(row, dict) else row['email_verified'],
+            has_password=row.get('has_password', 1) if isinstance(row, dict) else row['has_password'],
+            totp_enabled=row.get('totp_enabled', 0) if isinstance(row, dict) else row['totp_enabled'],
+            oauth_provider=row.get('oauth_provider') if isinstance(row, dict) else row['oauth_provider'],
+        )
 
 
 @login_manager.user_loader

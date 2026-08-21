@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Verify Email - Quick Aid</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Inter', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            color: #0f172a;
+        }
+        .auth-card {
+            background: rgba(255,255,255,0.92);
+            border-radius: 20px;
+            padding: 40px;
+            width: 100%;
+            max-width: 420px;
+            text-align: center;
+            box-shadow: 0 25px 45px rgba(0,0,0,0.2);
+        }
+        .auth-card h1 { font-size: 1.5em; margin-bottom: 10px; }
+        .auth-card p { color: #64748b; margin-bottom: 22px; font-size: 0.95em; }
+        a.btn-link {
+            display: inline-block; padding: 12px 24px; border-radius: 10px;
+            background: linear-gradient(135deg, #0ea5e9, #7c3aed); color: #fff; text-decoration: none; font-weight: 600;
+        }
+    </style>
+</head>
+<body>
+    <div class="auth-card">
+        {% if invalid %}
+            <h1>⚠️ Link expired or invalid</h1>
+            <p>This verification link is no longer valid. Verification links expire after 24 hours and can only be used once. You can request a new one from your account settings.</p>
+            <a class="btn-link" href="/login">Log in</a>
+        {% else %}
+            <h1>✅ Email verified</h1>
+            <p>Your email address has been confirmed. Thanks!</p>
+            <a class="btn-link" href="/">Go to Quick Aid</a>
+        {% endif %}
+    </div>
+</body>
+</html>
