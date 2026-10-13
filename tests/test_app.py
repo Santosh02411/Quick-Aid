@@ -10,7 +10,7 @@ import pytest
 class TestAuthFlow:
     def test_register_creates_account_and_logs_in(self, client):
         resp = client.post('/register', data={
-            'username': 'newuser', 'email': 'newuser@example.com', 'password': 'supersecret123'
+            'username': 'newuser', 'email': 'newuser@example.com', 'password': 'supersecret123', 'confirm_password': 'supersecret123'
         })
         assert resp.status_code == 302  # redirect to index on success
 
@@ -23,19 +23,19 @@ class TestAuthFlow:
         resp = client.post('/register', data={
             'username': registered_user['username'],
             'email': 'different@example.com',
-            'password': 'anotherpassword123'
+            'password': 'anotherpassword123', 'confirm_password': 'anotherpassword123'
         })
         assert resp.status_code == 409
 
     def test_register_short_password_rejected(self, client):
         resp = client.post('/register', data={
-            'username': 'shortpw', 'email': 'shortpw@example.com', 'password': '123'
+            'username': 'shortpw', 'email': 'shortpw@example.com', 'password': '123', 'confirm_password': '123'
         })
         assert resp.status_code == 400
 
     def test_register_invalid_username_rejected(self, client):
         resp = client.post('/register', data={
-            'username': 'a b!', 'email': 'bad@example.com', 'password': 'supersecret123'
+            'username': 'a b!', 'email': 'bad@example.com', 'password': 'supersecret123', 'confirm_password': 'supersecret123'
         })
         assert resp.status_code == 400
 

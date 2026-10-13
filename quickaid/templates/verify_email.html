@@ -1,0 +1,16 @@
+{% extends 'auth_base.html' %}
+{% from '_macros.html' import icon %}
+{% block title %}Verify email{% endblock %}
+{% block auth_content %}
+{% if invalid %}
+  <div class="status-icon bad">{{ icon('alert') }}</div>
+  <h1>Link expired or invalid</h1>
+  <p class="lead">Verification links expire after 24 hours and work only once. You can request a new one from Account settings.</p>
+  <a class="btn btn-block btn-lg" href="/login">Log in</a>
+{% else %}
+  <div class="status-icon">{{ icon('check') }}</div>
+  <h1>Email verified</h1>
+  <p class="lead">Thanks, your email address is confirmed.</p>
+  <a class="btn btn-block btn-lg" href="/">Go to Quick Aid</a>
+{% endif %}
+{% endblock %}

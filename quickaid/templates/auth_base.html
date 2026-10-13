@@ -1,0 +1,25 @@
+{% extends 'base.html' %}
+{% from '_macros.html' import icon %}
+{# Split-screen layout shared by every sign-in / account-recovery page. #}
+{% block body %}
+<div class="auth">
+  <aside class="auth-aside" aria-hidden="false">
+    <a class="logo" href="/"><span class="logo-mark">{{ icon('logo') }}</span>Quick Aid</a>
+    <div>
+      <h2>Know what to do in the first few minutes.</h2>
+      <p>Describe symptoms or upload a photo of an injury and get clear, step-by-step first-aid guidance.</p>
+    </div>
+    <ul class="auth-points">
+      <li>{{ icon('shield') }}<span>Your photos are analysed and deleted straight away. Only the results are saved.</span></li>
+      <li>{{ icon('phone') }}<span>Urgent signs are flagged first, with the emergency number ready to call.</span></li>
+      <li>{{ icon('lock') }}<span>Your history is private to your account, with optional two-factor sign-in.</span></li>
+    </ul>
+  </aside>
+  <main class="auth-main" id="main">
+    <div class="auth-top">
+      <button type="button" class="icon-btn theme-toggle" data-theme-toggle aria-label="Switch colour theme">{{ icon('moon', 'i-moon') }}{{ icon('sun', 'i-sun') }}</button>
+    </div>
+    <div class="auth-form">{% block auth_content %}{% endblock %}</div>
+  </main>
+</div>
+{% endblock %}

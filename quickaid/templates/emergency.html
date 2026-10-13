@@ -1,0 +1,101 @@
+{% extends 'base.html' %}
+{% from '_macros.html' import icon %}
+{% set active_page = 'emergency' %}
+{% block title %}Emergency{% endblock %}
+{% block content %}
+<div class="page">
+  <div class="page-head"><h1>Emergency help</h1></div>
+  <p class="lead muted" style="max-width:60ch">If someone is in danger, call first. Everything below can wait until you have called.</p>
+
+  <div class="call-tiles">
+    <a class="call-tile" href="tel:{{ emergency_number }}">
+      <div class="n">{{ emergency_number }}</div>
+      <div class="t">{{ icon('phone') }} National emergency number</div>
+    </a>
+    {% if ambulance_number and ambulance_number != emergency_number %}
+    <a class="call-tile" href="tel:{{ ambulance_number }}">
+      <div class="n">{{ ambulance_number }}</div>
+      <div class="t">{{ icon('phone') }} Ambulance</div>
+    </a>
+    {% endif %}
+  </div>
+
+  <h2>Call {{ emergency_number }} straight away for</h2>
+  <div class="panel" style="margin-bottom:2rem">
+    <ul style="columns:2 280px;margin:0;padding-left:1.2rem">
+      <li>Chest pain, pressure or tightness</li>
+      <li>Severe trouble breathing</li>
+      <li>Signs of stroke: face drooping, arm weakness, slurred speech</li>
+      <li>Bleeding that won't stop after 10 minutes of firm pressure</li>
+      <li>Loss of consciousness or a seizure</li>
+      <li>Severe burns, or burns to the face, hands or genitals</li>
+      <li>Poisoning or overdose</li>
+      <li>A suspected broken bone with deformity or numbness</li>
+      <li>Severe allergic reaction with swelling of the lips or throat</li>
+      <li>Thoughts of ending your life. In India you can also call Tele-MANAS on 14416</li>
+    </ul>
+  </div>
+
+  <h2>First-aid basics</h2>
+  <div class="guides">
+    <article class="guide">
+      <h3>Heavy bleeding</h3>
+      <ol>
+        <li>Press firmly on the wound with a clean cloth. Don't lift it to check.</li>
+        <li>If blood soaks through, add more cloth on top and keep pressing.</li>
+        <li>Raise the injured limb above the heart if you can.</li>
+        <li>Keep pressing until help arrives.</li>
+      </ol>
+      <p class="call-now">Call {{ emergency_number }} if it won't stop.</p>
+    </article>
+    <article class="guide">
+      <h3>Burns</h3>
+      <ol>
+        <li>Cool under cool running water for 20 minutes.</li>
+        <li>Take off rings and tight items before swelling starts, unless stuck to the skin.</li>
+        <li>Cover loosely with clean cling film or a non-fluffy cloth.</li>
+        <li>Don't use ice, butter, toothpaste or burst blisters.</li>
+      </ol>
+      <p class="call-now">Call {{ emergency_number }} for large, deep or facial burns.</p>
+    </article>
+    <article class="guide">
+      <h3>Choking (adult, can't speak or cough)</h3>
+      <ol>
+        <li>Give up to 5 firm back blows between the shoulder blades.</li>
+        <li>Then up to 5 abdominal thrusts (Heimlich).</li>
+        <li>Alternate until the object comes out or the person collapses.</li>
+      </ol>
+      <p class="call-now">Call {{ emergency_number }} if they collapse and start CPR.</p>
+    </article>
+    <article class="guide">
+      <h3>Not breathing: CPR</h3>
+      <ol>
+        <li>Call {{ emergency_number }} or ask someone else to.</li>
+        <li>Push hard and fast in the centre of the chest, about 100–120 times a minute.</li>
+        <li>Press down about 5–6 cm. Let the chest rise fully each time.</li>
+        <li>Don't stop until help or an AED arrives.</li>
+      </ol>
+    </article>
+    <article class="guide">
+      <h3>Stroke: think FAST</h3>
+      <ul>
+        <li><strong>Face</strong> drooping on one side</li>
+        <li><strong>Arm</strong> weak or numb</li>
+        <li><strong>Speech</strong> slurred or confused</li>
+        <li><strong>Time</strong> to call right now. Note when symptoms began.</li>
+      </ul>
+    </article>
+    <article class="guide">
+      <h3>Seizure</h3>
+      <ol>
+        <li>Clear the area and cushion the head. Don't hold the person down.</li>
+        <li>Never put anything in their mouth.</li>
+        <li>Time it. Once it stops, roll them onto their side.</li>
+      </ol>
+      <p class="call-now">Call {{ emergency_number }} if it lasts over 5 minutes or it's their first.</p>
+    </article>
+  </div>
+
+  <div class="notice" style="margin-top:2rem">{{ icon('info') }}<span>Quick Aid gives general information and can make mistakes. It is not a diagnosis and does not replace a doctor or emergency services.</span></div>
+</div>
+{% endblock %}

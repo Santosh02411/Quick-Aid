@@ -20,7 +20,7 @@ class TestPasswordReset:
         assert b'password reset link' in resp.data
 
     def test_reset_password_with_valid_token_changes_password(self, client, registered_user, app):
-        import database as db
+        from quickaid.core import database as db
         user_row = db.get_user_by_username(registered_user['username'])
         raw_token = db.create_token(user_row['id'], 'password_reset', ttl_seconds=3600)
 
@@ -48,7 +48,7 @@ class TestPasswordReset:
         assert b'expired or invalid' in resp.data
 
     def test_reset_password_token_single_use(self, client, registered_user, app):
-        import database as db
+        from quickaid.core import database as db
         user_row = db.get_user_by_username(registered_user['username'])
         raw_token = db.create_token(user_row['id'], 'password_reset', ttl_seconds=3600)
 
@@ -61,7 +61,7 @@ class TestPasswordReset:
         assert second_attempt.status_code == 400
 
     def test_reset_password_mismatched_confirmation_rejected(self, client, registered_user, app):
-        import database as db
+        from quickaid.core import database as db
         user_row = db.get_user_by_username(registered_user['username'])
         raw_token = db.create_token(user_row['id'], 'password_reset', ttl_seconds=3600)
 
@@ -73,12 +73,12 @@ class TestPasswordReset:
 
 class TestEmailVerification:
     def test_new_account_starts_unverified(self, client, registered_user):
-        import database as db
+        from quickaid.core import database as db
         user_row = db.get_user_by_username(registered_user['username'])
         assert user_row['email_verified'] == 0
 
     def test_verify_email_with_valid_token(self, client, registered_user):
-        import database as db
+        from quickaid.core import database as db
         user_row = db.get_user_by_username(registered_user['username'])
         raw_token = db.create_token(user_row['id'], 'email_verify', ttl_seconds=3600)
 
@@ -124,7 +124,7 @@ class TestAccountSettings:
         assert resp.status_code == 200
         assert b'Profile updated' in resp.data
 
-        import database as db
+        from quickaid.core import database as db
         updated = db.get_user_by_username('renameduser')
         assert updated is not None
         assert updated['email'] == 'renamed@example.com'
@@ -133,7 +133,7 @@ class TestAccountSettings:
     def test_update_profile_duplicate_username_rejected(self, client, registered_user):
         client.post('/logout')
         client.post('/register', data={
-            'username': 'someoneelse', 'email': 'someoneelse@example.com', 'password': 'password12345'
+            'username': 'someoneelse', 'email': 'someoneelse@example.com', 'password': 'password12345', 'confirm_password': 'password12345'
         })
         client.post('/logout')
         client.post('/login', data=registered_user)
@@ -197,7 +197,7 @@ class TestAccountDeletion:
         })
         assert resp.status_code == 302
 
-        import database as db
+        from quickaid.core import database as db
         assert db.get_user_by_username(registered_user['username']) is None
 
         # session should be logged out now
@@ -229,7 +229,7 @@ class TestTwoFactorAuth:
         assert resp.status_code == 200
         assert b'now enabled' in resp.data
 
-        import database as db
+        from quickaid.core import database as db
         user_row = db.get_user_by_username(registered_user['username'])
         assert user_row['totp_enabled'] == 1
 
@@ -268,7 +268,7 @@ class TestTwoFactorAuth:
         resp2 = client.post('/account/2fa/disable', data={'current_password': registered_user['password']})
         assert resp2.status_code == 200
 
-        import database as db
+        from quickaid.core import database as db
         assert db.get_user_by_username(registered_user['username'])['totp_enabled'] == 0
 
 
@@ -304,11 +304,11 @@ class TestGoogleOAuthCallbackLogic:
         monkeypatch.setenv('GOOGLE_CLIENT_SECRET', 'test-client-secret')
 
         import importlib
-        import database
+        from quickaid.core import database
         importlib.reload(database)
-        import oauth as oauth_module
+        from quickaid.accounts import oauth as oauth_module
         importlib.reload(oauth_module)
-        import app as app_module
+        from quickaid import app as app_module
         importlib.reload(app_module)
 
         app_module.app.config.update({'TESTING': True, 'WTF_CSRF_ENABLED': False})
@@ -333,7 +333,7 @@ class TestGoogleOAuthCallbackLogic:
     def test_callback_links_to_existing_account_with_matching_email(self, temp_db_path, monkeypatch):
         client, oauth_module, db = self._build_client(monkeypatch, temp_db_path)
         client.post('/register', data={
-            'username': 'existinguser', 'email': 'existing@example.com', 'password': 'password12345'
+            'username': 'existinguser', 'email': 'existing@example.com', 'password': 'password12345', 'confirm_password': 'password12345'
         })
         client.post('/logout')
 

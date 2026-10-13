@@ -1,0 +1,32 @@
+{% extends 'auth_base.html' %}
+{% from '_macros.html' import password_field %}
+{% block title %}Create account{% endblock %}
+{% block auth_content %}
+<h1>Create your account</h1>
+<p class="lead">Free, and takes under a minute.</p>
+
+{% if error %}<div class="alert alert-error" role="alert">{{ error }}</div>{% endif %}
+
+<form method="POST" data-password-form>
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <div class="field">
+    <label for="username">Username</label>
+    <input type="text" id="username" name="username" required autofocus autocomplete="username" pattern="[A-Za-z0-9_]{3,30}" value="{{ form_username|default('') }}">
+    <div class="hint">3–30 characters: letters, numbers and underscores.</div>
+  </div>
+  <div class="field">
+    <label for="email">Email</label>
+    <input type="email" id="email" name="email" required autocomplete="email" value="{{ form_email|default('') }}">
+  </div>
+  {{ password_field('password', 'password', 'Password', autocomplete='new-password', minlength=8, strength=true, hint='At least 8 characters. A mix of words, numbers and symbols is stronger.') }}
+  {{ password_field('confirm_password', 'confirm_password', 'Confirm password', autocomplete='new-password', minlength=8, match='password') }}
+  <button type="submit" class="btn btn-block btn-lg">Create account</button>
+</form>
+
+{% if google_oauth_enabled %}
+<div class="divider">or</div>
+<a class="btn-google" href="/login/google">Continue with Google</a>
+{% endif %}
+
+<p class="auth-switch">Already have an account? <a href="/login">Log in</a></p>
+{% endblock %}

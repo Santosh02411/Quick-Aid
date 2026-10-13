@@ -1,0 +1,47 @@
+{% extends 'base.html' %}
+{% from '_macros.html' import icon %}
+{% set active_page = 'history' %}
+{% block title %}History{% endblock %}
+{% block content %}
+<div class="page-narrow">
+  <div class="page-head">
+    <h1>Your history</h1>
+    {% if entries %}<button type="button" class="btn btn-outline-danger btn-sm" id="clearHistoryBtn">{{ icon('trash') }}Clear history</button>{% endif %}
+  </div>
+
+  {% if entries %}
+  <div class="entries">
+    {% for entry in entries %}
+    {% set level = (entry.urgency if entry.type == 'image' else entry.urgency_level) or 'medium' %}
+    <article class="entry">
+      <div class="entry-top">
+        <span class="badge {{ 'badge-danger' if level == 'high' else ('badge-warn' if level == 'medium' else 'badge-ok') }}">
+          {{ {'low': 'Low urgency', 'medium': 'See a doctor soon', 'high': 'Urgent'}.get(level, level|capitalize) }}
+        </span>
+        <span class="muted">{{ 'Photo check' if entry.type == 'image' else 'Symptom check' }}</span>
+        {% if entry.type == 'symptom' and entry.emergency_alert %}<span class="badge badge-danger">Emergency flagged</span>{% endif %}
+        <time>{{ entry.created_at }}</time>
+      </div>
+      <div class="entry-title">
+        {% if entry.type == 'image' %}{{ entry.original_filename or 'Uploaded photo' }}{% else %}“{{ entry.symptom_text }}”{% endif %}
+      </div>
+      <div class="tags">
+        {% for c in (entry.detected_conditions if entry.type == 'image' else entry.possible_conditions) %}<span class="tag">{{ c }}</span>{% endfor %}
+      </div>
+      {% if entry.recommendations %}
+      <details>
+        <summary>What was recommended</summary>
+        <ul>{% for r in entry.recommendations %}<li>{{ r }}</li>{% endfor %}</ul>
+      </details>
+      {% endif %}
+    </article>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="panel empty">
+    <p><strong>No checks yet.</strong></p>
+    <p>Run a <a href="/#image">photo check</a> or a <a href="/#symptoms">symptom check</a> and it will appear here.</p>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

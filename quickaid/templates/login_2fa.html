@@ -1,0 +1,16 @@
+{% extends 'auth_base.html' %}
+{% block title %}Two-factor code{% endblock %}
+{% block auth_content %}
+<h1>Enter your 2FA code</h1>
+<p class="lead">Open your authenticator app and type the 6-digit code for Quick Aid.</p>
+{% if error %}<div class="alert alert-error" role="alert">{{ error }}</div>{% endif %}
+<form method="POST">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <div class="field">
+    <label for="code" class="sr-only">6-digit code</label>
+    <input type="text" id="code" name="code" class="code-input" inputmode="numeric" pattern="[0-9]*" maxlength="6" autocomplete="one-time-code" required autofocus placeholder="000000">
+  </div>
+  <button type="submit" class="btn btn-block btn-lg">Verify</button>
+</form>
+<p class="auth-switch"><a href="/login">Back to log in</a></p>
+{% endblock %}
