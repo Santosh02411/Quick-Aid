@@ -1,0 +1,17 @@
+{
+  "images": [
+    {
+      "file": "images/example_graze.jpg",
+      "split": "dev",
+      "source": "describe where this photo came from",
+      "license": "CC0 / own work / licence name",
+      "labelled_by": "name and role of the person who labelled it",
+      "clinician_reviewed": false,
+      "expected_image_type": "injury_or_wound",
+      "expected_min_urgency": "low",
+      "expected_max_urgency": "medium",
+      "expected_finding_keywords": ["graze"],
+      "must_be_unusable": false
+    }
+  ]
+}

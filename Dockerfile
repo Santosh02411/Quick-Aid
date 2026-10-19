@@ -45,4 +45,4 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
 
 # gunicorn, not the Flask dev server - matches the Procfile used for
 # platform (Heroku-style) deployments.
-CMD ["sh", "-c", "gunicorn -w 2 -b 0.0.0.0:${PORT} --access-logfile - --error-logfile - app:app"]
+CMD ["sh", "-c", "gunicorn -w 2 -b 0.0.0.0:${PORT} --access-logfile - --error-logfile - wsgi:app"]

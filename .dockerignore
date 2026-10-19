@@ -24,6 +24,7 @@ tests/
 .coverage
 htmlcov/
 requirements-dev.txt
+deploy/
 
 # VCS / editor / OS
 .git/

@@ -1,0 +1,27 @@
+{% extends 'auth_base.html' %}
+{% from '_macros.html' import password_field %}
+{% block title %}Log in{% endblock %}
+{% block auth_content %}
+<h1>Welcome back</h1>
+<p class="lead">Log in to see your history and run new checks.</p>
+
+{% if error %}<div class="alert alert-error" role="alert">{{ error }}</div>{% endif %}
+
+<form method="POST">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <div class="field">
+    <label for="username">Username</label>
+    <input type="text" id="username" name="username" required autofocus autocomplete="username">
+  </div>
+  {{ password_field('password', 'password', 'Password', autocomplete='current-password') }}
+  <p style="text-align:right;margin:-.4rem 0 1.2rem"><a href="/forgot-password">Forgot password?</a></p>
+  <button type="submit" class="btn btn-block btn-lg">Log in</button>
+</form>
+
+{% if google_oauth_enabled %}
+<div class="divider">or</div>
+<a class="btn-google" href="/login/google">Continue with Google</a>
+{% endif %}
+
+<p class="auth-switch">New to Quick Aid? <a href="/register">Create an account</a></p>
+{% endblock %}

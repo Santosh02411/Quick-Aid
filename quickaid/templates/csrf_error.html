@@ -1,0 +1,9 @@
+{% extends 'auth_base.html' %}
+{% from '_macros.html' import icon %}
+{% block title %}Session expired{% endblock %}
+{% block auth_content %}
+<div class="status-icon bad">{{ icon('alert') }}</div>
+<h1>Your session expired</h1>
+<p class="lead">For your security, this form is no longer valid. Go back, refresh the page and try again.</p>
+<a class="btn btn-block btn-lg" href="/">Back to Quick Aid</a>
+{% endblock %}

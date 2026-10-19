@@ -1,0 +1,19 @@
+{% extends 'auth_base.html' %}
+{% block title %}Set up two-factor{% endblock %}
+{% block auth_content %}
+<h1>Set up two-factor sign-in</h1>
+<p class="lead">Scan the QR code with an authenticator app such as Google Authenticator, Authy or 1Password, then enter the 6-digit code it shows.</p>
+<div class="qr-box"><img src="{{ qr_data_uri }}" alt="Two-factor setup QR code"></div>
+<p class="hint" style="text-align:center">Can't scan? Enter this key manually:</p>
+<div class="secret-box">{{ secret }}</div>
+{% if error %}<div class="alert alert-error" role="alert">{{ error }}</div>{% endif %}
+<form method="POST" action="/account/2fa/confirm">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <div class="field">
+    <label for="code" class="sr-only">6-digit code</label>
+    <input type="text" id="code" name="code" class="code-input" inputmode="numeric" pattern="[0-9]*" maxlength="6" autocomplete="one-time-code" required autofocus placeholder="000000">
+  </div>
+  <button type="submit" class="btn btn-block btn-lg">Confirm and turn on</button>
+</form>
+<p class="auth-switch"><a href="/account">Cancel</a></p>
+{% endblock %}

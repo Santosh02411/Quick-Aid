@@ -10,7 +10,7 @@ import pytest
 class TestAuthFlow:
     def test_register_creates_account_and_logs_in(self, client):
         resp = client.post('/register', data={
-            'username': 'newuser', 'email': 'newuser@example.com', 'password': 'supersecret123'
+            'username': 'newuser', 'email': 'newuser@example.com', 'password': 'supersecret123', 'confirm_password': 'supersecret123'
         })
         assert resp.status_code == 302  # redirect to index on success
 
@@ -23,19 +23,19 @@ class TestAuthFlow:
         resp = client.post('/register', data={
             'username': registered_user['username'],
             'email': 'different@example.com',
-            'password': 'anotherpassword123'
+            'password': 'anotherpassword123', 'confirm_password': 'anotherpassword123'
         })
         assert resp.status_code == 409
 
     def test_register_short_password_rejected(self, client):
         resp = client.post('/register', data={
-            'username': 'shortpw', 'email': 'shortpw@example.com', 'password': '123'
+            'username': 'shortpw', 'email': 'shortpw@example.com', 'password': '123', 'confirm_password': '123'
         })
         assert resp.status_code == 400
 
     def test_register_invalid_username_rejected(self, client):
         resp = client.post('/register', data={
-            'username': 'a b!', 'email': 'bad@example.com', 'password': 'supersecret123'
+            'username': 'a b!', 'email': 'bad@example.com', 'password': 'supersecret123', 'confirm_password': 'supersecret123'
         })
         assert resp.status_code == 400
 
@@ -127,14 +127,26 @@ class TestImageValidation:
 
     def test_valid_png_accepted(self, client, registered_user):
         from PIL import Image
+        import numpy as np
+        rng = np.random.default_rng(1)
+        arr = np.clip(rng.integers(-25, 25, (240, 240, 1)) + np.array([215, 165, 145]), 0, 255).astype('uint8')
         buf = io.BytesIO()
-        Image.new('RGB', (10, 10), color='red').save(buf, format='PNG')
+        Image.fromarray(arr).save(buf, format='PNG')
         buf.seek(0)
 
         data = {'file': (buf, 'test.png')}
         resp = client.post('/upload', data=data, content_type='multipart/form-data')
         assert resp.status_code == 200
         assert resp.get_json()['success'] is True
+
+    def test_tiny_image_is_rejected_with_a_clear_message(self, client, registered_user):
+        from PIL import Image
+        buf = io.BytesIO()
+        Image.new('RGB', (10, 10), color='red').save(buf, format='PNG')
+        buf.seek(0)
+        resp = client.post('/upload', data={'file': (buf, 'tiny.png')}, content_type='multipart/form-data')
+        body = resp.get_json()
+        assert resp.status_code == 400 and body['code'] == 'too_small' and body['hints']
 
     def test_no_file_rejected(self, client, registered_user):
         resp = client.post('/upload', data={}, content_type='multipart/form-data')
@@ -198,9 +210,13 @@ class TestRateLimiting:
     def test_upload_rate_limited_after_10_requests(self, client, registered_user):
         from PIL import Image
 
+        import numpy as np
+        rng = np.random.default_rng(2)
+        arr = np.clip(rng.integers(-25, 25, (240, 240, 1)) + np.array([215, 165, 145]), 0, 255).astype('uint8')
+
         def make_upload():
             buf = io.BytesIO()
-            Image.new('RGB', (10, 10), color='blue').save(buf, format='PNG')
+            Image.fromarray(arr).save(buf, format='PNG')
             buf.seek(0)
             return {'file': (buf, 'test.png')}
 

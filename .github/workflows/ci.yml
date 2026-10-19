@@ -29,6 +29,15 @@ jobs:
       - name: Run tests
         run: pytest -v
 
+      - name: Database migrations apply cleanly to a new database
+        run: DATABASE_PATH=/tmp/ci-migrate.db python -m quickaid.core.migrations upgrade && DATABASE_PATH=/tmp/ci-migrate.db python -m quickaid.core.migrations check
+
+      - name: Evaluation datasets match their recorded versions
+        run: python evaluation/manage_datasets.py check
+
+      - name: Safety evaluation (fails if a safety threshold is missed)
+        run: python evaluation/run_evaluation.py --weak-model --no-write
+
   dependency-audit:
     runs-on: ubuntu-latest
     steps:

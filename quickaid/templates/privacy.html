@@ -1,0 +1,58 @@
+{% extends 'base.html' %}
+{% from '_macros.html' import icon %}
+{% block title %}Privacy and your data{% endblock %}
+{% block content %}
+<div class="page-narrow prose">
+  <div class="page-head"><h1>Privacy and your data</h1></div>
+  <p class="lead muted">Health information is personal. Here is exactly what Quick Aid stores, for how long, and what you can do about it.</p>
+
+  <h2>What is stored</h2>
+  <ul>
+    <li><strong>Your checks:</strong> what you described, the result (including the AI's explanations and advice), and any personal notes you add.</li>
+    <li><strong>Your chats</strong> about those results.</li>
+    <li><strong>Your account:</strong> username, email, a hashed password, and your region and retention choice.</li>
+    <li><strong>Not stored: your photos.</strong> A photo is checked, analysed and <strong>deleted immediately</strong>, even if the analysis fails. Only the written result is kept. If anything is ever left behind by a crash, a clean-up deletes it within {{ policy.uploaded_photos.leftover_sweep_minutes }} minutes.</li>
+  </ul>
+
+  <h2>How it is protected</h2>
+  <ul>
+    <li>Your symptoms, results, notes and chats are <strong>encrypted in the database</strong>, so a copy of the database file does not expose them.</li>
+    <li>Everything is tied to your account. Another user cannot open, search, change or delete your entries, even by guessing a link.</li>
+    <li>Pages that show your health information are never stored by your browser's cache.</li>
+  </ul>
+
+  <h2>Who else sees it</h2>
+  <p>When AI is switched on, the text you type and the photo you upload are <strong>sent to Google's Gemini service</strong> to produce the result. We do not sell your data and show no advertising. Usage statistics (timings and counts) contain no health text.</p>
+
+  <h2>How long it is kept</h2>
+  <div class="table-wrap"><table class="tbl">
+    <thead><tr><th>What</th><th>How long</th></tr></thead>
+    <tbody>
+      <tr><td>Uploaded photos</td><td>Deleted immediately after analysis</td></tr>
+      <tr><td>Unfinished symptom interviews</td><td>{{ policy.interview_sessions_hours }} hours</td></tr>
+      <tr><td>Saved checks and chats</td><td>
+        {% if policy.saved_history.default_days == 0 %}Until you delete them{% else %}{{ policy.saved_history.default_days }} days by default{% endif %}.
+        You can choose
+        {% for c in policy.saved_history.choices %}{{ c.label|lower }}{{ ', ' if not loop.last else '' }}{% endfor %}
+        in <a href="/account#your-data">Account settings</a>.
+        {% if policy.saved_history.ceiling_days %}The service never keeps them longer than {{ policy.saved_history.ceiling_days }} days.{% endif %}
+      </td></tr>
+      <tr><td>Usage statistics (no health text)</td><td>{{ policy.telemetry_days }} days</td></tr>
+      <tr><td>Sign-in and password-reset links</td><td>Until they expire (1 hour / 24 hours)</td></tr>
+      <tr><td>Backups of the database</td><td>The most recent {{ policy.backups_kept }} backups. Something you delete leaves the live service at once, but can remain in older backups until they rotate out.</td></tr>
+    </tbody>
+  </table></div>
+  <p class="hint">An automatic clean-up runs about every {{ policy.sweep_interval_hours }} hours and enforces these periods.</p>
+
+  <h2>Your controls</h2>
+  <ul>
+    <li><strong>Review</strong> every check in <a href="/history">History</a>, with search, filters and a full printable report.</li>
+    <li><strong>Add notes</strong> to any check, for your own records or to share with a doctor.</li>
+    <li><strong>Export</strong> everything you have saved, as JSON or a CSV summary.</li>
+    <li><strong>Delete</strong> a single check, all of your history, or your whole account, at any time. It takes effect immediately.</li>
+    <li><strong>Choose</strong> how long things are kept.</li>
+  </ul>
+
+  <div class="notice" style="margin-top:2rem">{{ icon('info') }}<span>Quick Aid gives general information and can be wrong. It is not a diagnosis. In an emergency call <strong>{{ emergency_number }}</strong>.</span></div>
+</div>
+{% endblock %}

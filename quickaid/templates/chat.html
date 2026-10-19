@@ -1,0 +1,64 @@
+{% extends 'base.html' %}
+{% from '_macros.html' import icon %}
+{% block title %}Ask Quick Aid{% endblock %}
+{% block content %}
+<div class="page chat-page" id="chatApp" data-open-type="{{ open_type }}" data-open-id="{{ open_id }}" data-max="{{ max_chat_length }}">
+  <div class="page-head">
+    <h1>Ask Quick Aid</h1>
+    <button type="button" class="btn btn-ghost btn-sm chat-list-toggle" id="chatListToggle">{{ icon('history') }}Chats</button>
+  </div>
+
+  <div class="chat-shell">
+    <aside class="chat-list" id="chatList" aria-label="Your conversations">
+      <button type="button" class="btn btn-block" id="newChatBtn">{{ icon('plus') }}New chat</button>
+
+      <div class="new-chat-panel" id="newChatPanel" hidden>
+        <label for="attachSelect" class="label">What is this chat about?</label>
+        <select id="attachSelect"><option value="">A general health question</option></select>
+        <p class="hint">Pick a past check and I'll answer with it in mind.</p>
+        <div class="actions" style="margin-top:.6rem">
+          <button type="button" class="btn btn-sm" id="startChatBtn">Start chat</button>
+          <button type="button" class="btn btn-ghost btn-sm" id="cancelNewChat">Cancel</button>
+        </div>
+      </div>
+
+      <div class="field chat-search">
+        <label for="chatSearch" class="sr-only">Search your chats</label>
+        <input type="search" id="chatSearch" placeholder="Search your chats" maxlength="100" autocomplete="off">
+      </div>
+      <ul class="chat-items" id="chatItems"></ul>
+      <p class="empty" id="chatListEmpty" hidden>No chats found. Ask about one of your checks, or start a new chat.</p>
+    </aside>
+
+    <section class="chat-thread" aria-label="Conversation">
+      <div class="chat-safety" role="note">
+        {{ icon('shield') }}
+        <span>I can explain and guide, but I can't diagnose, prescribe or give medicine doses, and I can make mistakes. In an emergency call <strong>{{ emergency_number }}</strong>.</span>
+      </div>
+      {% if not ai_ready %}
+      <div class="alert alert-warn" style="margin:.8rem 1rem 0">Basic mode: I can only answer from your earlier result. Add a Gemini key for a fuller conversation.</div>
+      {% endif %}
+
+      <div class="chat-context" id="chatContext" hidden></div>
+
+      <div class="chat-empty" id="chatEmpty">
+        <div class="panel-icon">{{ icon('chat') }}</div>
+        <h2>Ask a follow-up</h2>
+        <p class="muted">Open a chat about one of your checks, or start a new one. Your chats are private and stored encrypted.</p>
+      </div>
+
+      <div class="chat-messages" id="chatMessages" role="log" aria-live="polite" hidden></div>
+      <div class="chat-typing" id="chatTyping" hidden><span class="spinner"></span> Thinking…</div>
+      <div class="chips chat-suggest" id="chatSuggest" hidden></div>
+
+      <form class="chat-composer" id="chatForm" hidden>
+        <label for="chatInput" class="sr-only">Your question</label>
+        <textarea id="chatInput" rows="1" maxlength="{{ max_chat_length }}" placeholder="Ask a question about your result…"></textarea>
+        <button type="submit" class="btn" id="chatSend" aria-label="Send">{{ icon('send') }}</button>
+      </form>
+      <div class="counter chat-count" id="chatCountWrap" hidden><span id="chatCount">0</span> / {{ max_chat_length }}</div>
+    </section>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='js/chat.js') }}" defer></script>{% endblock %}

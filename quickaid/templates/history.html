@@ -1,0 +1,102 @@
+{% extends 'base.html' %}
+{% from '_macros.html' import icon %}
+{% set active_page = 'history' %}
+{% block title %}History{% endblock %}
+{% macro level_badge(level) -%}
+  <span class="badge {{ 'badge-danger' if level == 'high' else ('badge-warn' if level == 'medium' else 'badge-ok') }}">
+    {{ {'low': 'Low urgency', 'medium': 'See a doctor soon', 'high': 'Urgent'}.get(level, level|capitalize) }}</span>
+{%- endmacro %}
+{% block content %}
+{% set f = filters %}
+{% set active = f.q or f.type or f.urgency or f.emergency is not none or f.date_from or f.date_to %}
+<div class="page history-page">
+  <div class="page-head">
+    <h1>Your history</h1>
+    <div class="head-actions">
+      <a class="btn btn-ghost btn-sm" href="/api/history/export?format=json" title="Everything you have saved, with notes and chats">{{ icon('upload') }}Export all</a>
+      <a class="btn btn-ghost btn-sm" href="/api/history/export?format=csv">CSV summary</a>
+      <button type="button" class="btn btn-outline-danger btn-sm" id="clearHistoryBtn" {% if not page.total and not active %}hidden{% endif %}>{{ icon('trash') }}Delete all</button>
+    </div>
+  </div>
+
+  {% if error %}<div class="alert alert-error" role="alert">{{ error }}. Showing everything instead.</div>{% endif %}
+
+  <form class="filters panel" method="get" action="/history" role="search" aria-label="Search and filter your history">
+    <div class="filter-grid">
+      <div class="field fg-wide"><label for="q">Search</label>
+        <input type="text" id="q" name="q" value="{{ f.q }}" maxlength="100" placeholder="Symptoms, conditions, advice, or your notes"></div>
+      <div class="field"><label for="type">Type</label>
+        <select id="type" name="type"><option value="">All</option>
+          <option value="symptom" {{ 'selected' if f.type == ['symptom'] }}>Symptom checks</option>
+          <option value="image" {{ 'selected' if f.type == ['image'] }}>Photo checks</option></select></div>
+      <div class="field"><label for="urgency">Urgency</label>
+        <select id="urgency" name="urgency"><option value="">Any</option>
+          {% for v, t in [('high', 'Urgent'), ('medium', 'See a doctor soon'), ('low', 'Low')] %}
+          <option value="{{ v }}" {{ 'selected' if f.urgency == [v] }}>{{ t }}</option>{% endfor %}</select></div>
+      <div class="field"><label for="date_from">From</label><input type="date" id="date_from" name="date_from" value="{{ f.date_from or '' }}"></div>
+      <div class="field"><label for="date_to">To</label><input type="date" id="date_to" name="date_to" value="{{ f.date_to or '' }}"></div>
+      <div class="field"><label for="sort">Sort by</label>
+        <select id="sort" name="sort">
+          {% for v, t in [('newest', 'Newest first'), ('oldest', 'Oldest first'), ('urgency', 'Most urgent first')] %}
+          <option value="{{ v }}" {{ 'selected' if f.sort == v }}>{{ t }}</option>{% endfor %}</select></div>
+      <div class="field"><label for="per_page">Per page</label>
+        <select id="per_page" name="per_page">{% for n in (10, 20, 50, 100) %}<option value="{{ n }}" {{ 'selected' if f.per_page == n }}>{{ n }}</option>{% endfor %}</select></div>
+    </div>
+    <div class="filter-foot">
+      <label class="check"><input type="checkbox" name="emergency" value="true" {{ 'checked' if f.emergency is true }}> Only emergencies</label>
+      <span class="spacer"></span>
+      {% if active %}<a class="btn btn-ghost btn-sm" href="/history">Reset</a>{% endif %}
+      <button type="submit" class="btn btn-sm">Search</button>
+    </div>
+  </form>
+
+  {% if page.total %}
+  <p class="result-count" role="status">
+    {% set first = (page.page - 1) * page.per_page + 1 %}{% set last = [page.page * page.per_page, page.total]|min %}
+    Showing {{ first }}–{{ last }} of {{ page.total }}{{ ' matching' if active }} check{{ '' if page.total == 1 else 's' }}
+  </p>
+  <div class="entries">
+    {% for entry in entries %}
+    <article class="entry" data-entry="{{ entry.type }}:{{ entry.id }}">
+      <div class="entry-top">
+        {{ level_badge(entry.level) }}
+        <span class="muted">{{ 'Photo check' if entry.type == 'image' else 'Symptom check' }}</span>
+        {% if entry.emergency_alert %}<span class="badge badge-danger">Emergency flagged</span>{% endif %}
+        {% if entry.has_notes %}<span class="badge badge-ok" title="You added a note">Note</span>{% endif %}
+        <time datetime="{{ entry.created_at }}">{{ entry.created_at[:16]|replace('T', ' ') }}</time>
+      </div>
+      <div class="entry-title">{% if entry.type == 'symptom' %}“{{ entry.title }}”{% else %}{{ entry.title }}{% endif %}</div>
+      <div class="tags">{% for c in entry.conditions[:4] %}<span class="tag">{{ c }}</span>{% endfor %}</div>
+      <div class="entry-actions">
+        <a class="btn btn-sm" href="/history/{{ entry.type }}/{{ entry.id }}">View report</a>
+        <a class="btn btn-ghost btn-sm" href="/chat?type={{ entry.type }}&id={{ entry.id }}">{{ icon('chat') }}Ask a follow-up</a>
+        <button type="button" class="btn btn-ghost btn-sm danger-text" data-delete-entry="{{ entry.type }}:{{ entry.id }}">{{ icon('trash') }}Delete</button>
+      </div>
+    </article>
+    {% endfor %}
+  </div>
+
+  {% if page.pages > 1 %}
+  <nav class="pager" aria-label="Pages of results">
+    {% if page.has_prev %}<a class="btn btn-ghost btn-sm" rel="prev" href="{{ url_for('history.history_page', page=page.page - 1, **base_query) }}">← Previous</a>{% endif %}
+    {% for n in range([1, page.page - 2]|max, [page.pages, page.page + 2]|min + 1) %}
+      {% if n == page.page %}<span class="pg current" aria-current="page">{{ n }}</span>
+      {% else %}<a class="pg" href="{{ url_for('history.history_page', page=n, **base_query) }}">{{ n }}</a>{% endif %}
+    {% endfor %}
+    {% if page.has_next %}<a class="btn btn-ghost btn-sm" rel="next" href="{{ url_for('history.history_page', page=page.page + 1, **base_query) }}">Next →</a>{% endif %}
+  </nav>
+  {% endif %}
+  {% else %}
+  <div class="panel empty">
+    {% if active %}<p><strong>No checks match.</strong></p><p>Try fewer words or clear a filter. <a href="/history">Reset the search</a>.</p>
+    {% else %}<p><strong>No checks yet.</strong></p><p>Run a <a href="/#image">photo check</a> or a <a href="/#symptoms">symptom check</a> and it will appear here.</p>{% endif %}
+  </div>
+  {% endif %}
+
+  <p class="hint retention-note">
+    {% if retention.effective_days == 0 %}Your history is kept until you delete it.{% else %}Entries are deleted automatically after {{ retention.effective_days }} days.{% endif %}
+    <a href="/account#your-data">Change this</a> · <a href="/privacy">How your data is handled</a>
+  </p>
+</div>
+{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='js/history.js') }}" defer></script>{% endblock %}

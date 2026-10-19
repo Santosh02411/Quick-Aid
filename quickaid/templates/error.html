@@ -1,0 +1,12 @@
+{% extends 'base.html' %}
+{% from '_macros.html' import icon %}
+{% block title %}Something went wrong{% endblock %}
+{% block content %}
+<div class="page-narrow" style="text-align:center;padding-top:3rem">
+  <div class="status-icon bad" style="margin-inline:auto">{{ icon('alert') }}</div>
+  <h1>Something went wrong</h1>
+  <p class="muted">We hit an unexpected problem. Nothing you entered was lost. Please try again.</p>
+  {% if request_id %}<p class="hint">If it keeps happening, quote this reference: <code>{{ request_id }}</code></p>{% endif %}
+  <p style="margin-top:1.5rem"><a class="btn" href="/">Back to Quick Aid</a></p>
+</div>
+{% endblock %}

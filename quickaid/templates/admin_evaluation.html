@@ -1,0 +1,76 @@
+{% extends 'base.html' %}
+{% from '_macros.html' import icon %}
+{% set active_page = 'admin' %}
+{% block title %}AI evaluation{% endblock %}
+{% block content %}
+<div class="page admin-page" id="adminApp">
+  <div class="page-head">
+    <h1>AI evaluation</h1>
+    <span class="badge badge-warn">Internal · admins only</span>
+  </div>
+  <p class="muted" style="max-width:78ch">How well does the medical AI work, and is it getting better or worse? <strong>Evaluation runs</strong> score the system on a curated dataset with known answers, which is the only way to get recall and false-negative / false-positive rates. <strong>Live telemetry</strong> measures what really happens (failures, validity, latency, cost) but cannot tell right from wrong, because nobody labels real conversations.</p>
+
+  <div class="cfg" id="cfg" aria-label="Current configuration"></div>
+  <div id="dsProblems"></div>
+
+  <section class="panel" aria-labelledby="kpi-h">
+    <div class="page-head" style="margin-bottom:.6rem">
+      <h2 id="kpi-h" style="margin:0">Evaluation results</h2>
+      <label class="inline-label">Run <select id="kpiRun"></select></label>
+    </div>
+    <div id="runBanner"></div>
+    <div class="kpi-grid" id="kpis"></div>
+  </section>
+
+  <section class="panel" aria-labelledby="trend-h">
+    <div class="page-head" style="margin-bottom:.6rem">
+      <h2 id="trend-h" style="margin:0">Trends across runs</h2>
+      <label class="inline-label">Show <select id="trendMode"><option value="">all runs</option></select></label>
+    </div>
+    <div class="charts" id="charts"></div>
+  </section>
+
+  <section class="panel" aria-labelledby="runs-h">
+    <h2 id="runs-h">Versioned runs</h2>
+    <p class="hint">Every run records its model, prompt fingerprint, safety-engine version and dataset versions. Pick a baseline (A) and a candidate (B) to compare.</p>
+    <div class="table-wrap"><table class="tbl" id="runsTable"></table></div>
+    <div class="actions"><button type="button" class="btn btn-sm" id="compareBtn">Compare A and B</button><span class="hint" id="compareHint"></span></div>
+    <div id="compareOut"></div>
+  </section>
+
+  <section class="panel" aria-labelledby="tel-h">
+    <div class="page-head" style="margin-bottom:.6rem">
+      <h2 id="tel-h" style="margin:0">Live telemetry</h2>
+      <label class="inline-label">Window <select id="telDays"><option value="1">24 hours</option><option value="7" selected>7 days</option><option value="30">30 days</option></select></label>
+    </div>
+    <p class="hint">No user text, images or identities are recorded: only timings, token counts, validity and outcome labels.</p>
+    <div class="kpi-grid" id="telKpis"></div>
+    <div class="charts" id="telCharts"></div>
+    <div id="telTables"></div>
+  </section>
+
+  <section class="panel" aria-labelledby="ds-h">
+    <h2 id="ds-h">Datasets and reference data</h2>
+    <div class="table-wrap"><table class="tbl" id="dsTable"></table></div>
+    <div id="imgRef"></div>
+  </section>
+
+  <section class="panel" aria-labelledby="new-h">
+    <h2 id="new-h">Run an evaluation now</h2>
+    <p class="hint">Offline and mock runs are free and take seconds. <strong>Live runs cost real money</strong>, so they stay on the command line: <code>python evaluation/run_evaluation.py --model live --record evaluation/recordings/run.jsonl</code>.</p>
+    <div class="run-form">
+      <label>Model <select id="newModel">
+        <option value="offline">Rules only (no AI)</option>
+        <option value="mock-rules">Mock: rule-based answers (synthetic)</option>
+        <option value="mock-weak">Mock: unsafe "always low" model (synthetic)</option>
+        <option value="mock-flaky">Mock: flaky API + invalid JSON (synthetic)</option></select></label>
+      <fieldset class="sets" id="newSets"><legend>Datasets</legend></fieldset>
+      <label>Note <input type="text" id="newLabel" maxlength="120" placeholder="e.g. prompt v2: stricter chest-pain wording"></label>
+      <button type="button" class="btn" id="newRunBtn">Run evaluation</button>
+    </div>
+    <div class="loading" id="newLoading" role="status"><span class="spinner"></span>Running…</div>
+    <div id="newOut" aria-live="polite"></div>
+  </section>
+</div>
+{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='js/admin.js') }}" defer></script>{% endblock %}

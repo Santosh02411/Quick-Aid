@@ -1,0 +1,103 @@
+{% extends 'base.html' %}
+{% from '_macros.html' import icon %}
+{% set active_page = 'history' %}
+{% set full = entry.full or {} %}
+{% set is_image = entry.type == 'image' %}
+{% block title %}{{ 'Photo check' if is_image else 'Symptom check' }} report{% endblock %}
+{% macro list_section(title, items, cls='') -%}
+  {% if items %}<section class="rep-sec"><h3>{{ title }}</h3><ul class="{{ cls }}">{% for i in items %}<li>{{ i }}</li>{% endfor %}</ul></section>{% endif %}
+{%- endmacro %}
+{% block content %}
+<article class="page-narrow report" id="report" data-entry="{{ entry.type }}:{{ entry.id }}">
+  <div class="page-head no-print">
+    <a class="btn btn-ghost btn-sm" href="/history">← History</a>
+    <div class="head-actions">
+      <button type="button" class="btn btn-ghost btn-sm" data-print>Print / save as PDF</button>
+      <a class="btn btn-ghost btn-sm" href="/api/history/{{ entry.type }}/{{ entry.id }}/export">Download JSON</a>
+      <a class="btn btn-ghost btn-sm" href="/chat?type={{ entry.type }}&id={{ entry.id }}">{{ icon('chat') }}Ask a follow-up</a>
+      <button type="button" class="btn btn-outline-danger btn-sm" data-delete-entry="{{ entry.type }}:{{ entry.id }}" data-after="/history">{{ icon('trash') }}Delete</button>
+    </div>
+  </div>
+
+  <header class="rep-head">
+    <p class="muted">{{ 'Photo check' if is_image else 'Symptom check' }} · {{ entry.created_at[:16]|replace('T', ' ') }} (UTC) · Report #{{ entry.id }}</p>
+    <h1>{{ entry.title }}</h1>
+    <div class="tags">
+      <span class="badge {{ 'badge-danger' if entry.level == 'high' else ('badge-warn' if entry.level == 'medium' else 'badge-ok') }}">
+        {{ {'low': 'Low urgency', 'medium': 'See a doctor soon', 'high': 'Urgent'}.get(entry.level, entry.level) }}</span>
+      {% if entry.emergency_alert %}<span class="badge badge-danger">Emergency flagged</span>{% endif %}
+      {% if full.timeframe %}<span class="badge badge-ok">Suggested timing: {{ full.timeframe }}</span>{% endif %}
+      {% if full.analysis_mode == 'basic' %}<span class="badge badge-warn">Basic mode (no AI)</span>{% endif %}
+    </div>
+  </header>
+
+  <div class="alert alert-warn rep-warn">AI-generated estimate for general information. It is <strong>not a diagnosis</strong> and can be wrong. Please see a healthcare professional. In an emergency call {{ emergency_number }}.</div>
+
+  {% if full.summary %}<p class="rep-summary">{{ full.summary }}</p>{% endif %}
+
+  {% if not is_image %}
+    {% if entry.symptom_text %}<section class="rep-sec"><h3>What you described</h3><blockquote>{{ entry.symptom_text }}</blockquote></section>{% endif %}
+    {% set reported = full.reported or {} %}
+    {% if reported.details %}<section class="rep-sec"><h3>Details you gave</h3><dl class="kv">{% for d in reported.details %}<dt>{{ d.label }}</dt><dd>{{ d.value }}</dd>{% endfor %}</dl></section>{% endif %}
+    {% if entry.detected_symptoms %}<section class="rep-sec"><h3>What you reported</h3><div class="tags">{% for s in entry.detected_symptoms %}<span class="tag">{{ s }}</span>{% endfor %}</div></section>{% endif %}
+  {% else %}
+    {% if full.findings %}<section class="rep-sec rcard observed"><div class="rcard-head"><h3>What is visible in the photo</h3><span class="badge badge-ok">Observed</span></div>
+      <ol class="findings numbered">{% for f in full.findings %}<li>{{ f.description }} <span class="badge {{ 'badge-ok' if f.certainty == 'clearly visible' else 'badge-warn' }}">{{ f.certainty }}</span></li>{% endfor %}</ol></section>{% endif %}
+  {% endif %}
+
+  {% if full.possible_explanations %}
+  <section class="rep-sec {{ 'rcard interp' if is_image }}">
+    <div class="rcard-head"><h3>What it could be</h3>{% if is_image %}<span class="badge badge-warn">AI interpretation · unverified</span>{% endif %}</div>
+    {% if full.interpretation_note %}<p class="rcard-note">{{ full.interpretation_note }}</p>{% endif %}
+    <ul class="explain">{% for e in full.possible_explanations %}<li><strong>{{ e.name }}</strong> <span class="badge {{ 'badge-warn' if e.likelihood == 'more likely' else 'badge-ok' }}">{{ e.likelihood }}</span>
+      {% if e.why %}<div class="muted">{{ e.why }}</div>{% endif %}{% if e.supported_by %}<div class="muted">Based on: {{ e.supported_by|join('; ') }}</div>{% endif %}</li>{% endfor %}</ul>
+  </section>
+  {% elif entry.conditions %}
+  <section class="rep-sec {{ 'rcard interp' if is_image }}"><div class="rcard-head"><h3>What it could be</h3>{% if is_image %}<span class="badge badge-warn">AI interpretation · unverified</span>{% endif %}</div>
+    <div class="tags">{% for c in entry.conditions %}<span class="tag">{{ c }}</span>{% endfor %}</div></section>
+  {% endif %}
+
+  {{ list_section('Why this level', full.urgency_reasons) }}
+  {{ list_section('Warning signs present now', full.red_flags_present, 'present') }}
+  {{ list_section('What to do', full.recommendations or entry.recommendations) }}
+  {{ list_section('Avoid', full.avoid, 'avoid') }}
+  {{ list_section('Warning signs: get urgent help if', full.red_flags) }}
+  {{ list_section('See a doctor if', full.see_doctor_when) }}
+  {{ list_section('What a photo cannot tell us', full.not_assessable) }}
+  {{ list_section('What would make this more reliable', full.information_gaps) }}
+
+  {% if full.interview and full.interview.answers %}
+  <section class="rep-sec"><h3>Your interview answers</h3><ul>{% for a in full.interview.answers %}<li>{{ a.question }} <strong>{{ a.answer }}</strong></li>{% endfor %}</ul></section>{% endif %}
+
+  {% if full.reliability %}
+  <section class="rep-sec reliability" data-level="{{ full.reliability.level }}">
+    <div class="rel-head"><strong>How reliable is this?</strong><span class="rel-label">{{ full.reliability.label }}</span></div>
+    {% if full.uncertainty_statement %}<p class="rel-statement">{{ full.uncertainty_statement }}</p>{% endif %}
+    {% if full.reliability.reasons %}<ul>{% for r in full.reliability.reasons %}<li>{{ r }}</li>{% endfor %}</ul>{% endif %}
+    <p class="hint">{{ full.reliability.note }}</p>
+  </section>{% endif %}
+
+  {% if full.safety_review and full.safety_review.adjustments %}
+  <section class="rep-sec"><h3>Safety checks applied</h3><ul>{% for a in full.safety_review.adjustments %}<li>{{ a }}</li>{% endfor %}</ul></section>{% endif %}
+
+  {% if full.disclaimer or entry.disclaimer %}<p class="fine">{{ full.disclaimer or entry.disclaimer }}</p>{% endif %}
+
+  <section class="rep-sec notes no-print" id="notes">
+    <h3>My notes</h3>
+    <p class="hint">Only you can see this. It is stored encrypted and is included in your export.</p>
+    <form data-notes-form data-entry="{{ entry.type }}:{{ entry.id }}">
+      <label for="notesText" class="sr-only">My notes</label>
+      <textarea id="notesText" name="notes" rows="5" maxlength="2000" placeholder="For example: when it started, what helped, questions for the doctor…">{{ entry.notes }}</textarea>
+      <div class="notes-foot"><span class="counter"><span id="notesCount">{{ entry.notes|length }}</span> / 2000</span>
+        <span class="match-msg" id="notesMsg" aria-live="polite">{% if entry.notes_updated_at %}Saved {{ entry.notes_updated_at[:16]|replace('T', ' ') }} UTC{% endif %}</span>
+        <button type="submit" class="btn btn-sm">Save note</button></div>
+    </form>
+  </section>
+  <section class="print-only rep-sec">{% if entry.notes %}<h3>My notes</h3><p style="white-space:pre-wrap">{{ entry.notes }}</p>{% endif %}</section>
+
+  {% if entry.conversations %}
+  <section class="rep-sec no-print"><h3>Conversations about this check</h3>
+    <ul>{% for c in entry.conversations %}<li><a href="/chat?type={{ entry.type }}&id={{ entry.id }}">{{ c.title }}</a> <span class="muted">· {{ c.message_count }} message{{ '' if c.message_count == 1 else 's' }}</span></li>{% endfor %}</ul></section>{% endif %}
+</article>
+{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='js/history.js') }}" defer></script>{% endblock %}

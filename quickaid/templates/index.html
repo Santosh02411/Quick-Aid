@@ -1,0 +1,227 @@
+{% extends 'base.html' %}
+{% from '_macros.html' import icon %}
+{% set active_page = 'dashboard' %}
+{% block title %}{% if current_user.is_authenticated %}Dashboard{% else %}First-aid guidance in minutes{% endif %}{% endblock %}
+
+{% block content %}
+{% if current_user.is_authenticated %}
+{# ======================= DASHBOARD ======================= #}
+<div class="page">
+  <div class="greeting">
+    <div>
+      <h1><span id="greet" data-name="{{ current_user.username }}">Welcome back</span>, {{ current_user.username }}</h1>
+      <p>Check an injury or describe how you feel. Results take a few seconds.</p>
+    </div>
+    <a class="btn btn-ghost" href="/chat">{{ icon('chat') }}Ask a follow-up question</a>
+  </div>
+
+  <div class="sos-strip" role="note">
+    {{ icon('alert') }}
+    <span><strong>In an emergency, call {{ emergency_number }} first.</strong> Quick Aid is for guidance, not for emergencies.</span>
+    <a class="btn btn-danger btn-sm" href="tel:{{ emergency_number }}">{{ icon('phone') }}Call {{ emergency_number }}</a>
+  </div>
+
+  <section class="stats" aria-label="Your activity">
+    <div class="stat"><div class="num" id="statTotal">{{ stats.total }}</div><div class="lbl">Checks done</div></div>
+    <div class="stat"><div class="num" id="statImages">{{ stats.images }}</div><div class="lbl">Photo checks</div></div>
+    <div class="stat"><div class="num" id="statSymptoms">{{ stats.symptoms }}</div><div class="lbl">Symptom checks</div></div>
+    <div class="stat {% if stats.urgent %}stat-alert{% endif %}"><div class="num" id="statUrgent">{{ stats.urgent }}</div><div class="lbl">Flagged as urgent</div></div>
+  </section>
+
+  <div class="tools">
+    <section class="panel" id="image" aria-labelledby="image-h">
+      <div class="panel-head">
+        <span class="panel-icon">{{ icon('camera') }}</span>
+        <h2 id="image-h">Check an injury or skin problem</h2>
+      </div>
+
+      {% if not ai_connected %}
+      <div class="alert alert-warn" role="note"><strong>AI is not connected.</strong> The photo check will only measure colour and quality. It cannot say what is wrong. If you are worried, see a doctor.</div>
+      {% endif %}
+
+      <div id="uploader">
+        <div class="dropzone" id="dropzone" role="button" tabindex="0" aria-label="Drop a photo here, or press Enter to choose one" aria-describedby="uploadStatus">
+          {{ icon('upload') }}
+          <p><strong>Drop a photo here</strong> or paste one</p>
+          <p class="hint">JPG, PNG, WebP, GIF or BMP, up to 16 MB</p>
+        </div>
+        <div class="upload-buttons">
+          <button type="button" class="btn btn-ghost" id="chooseBtn">{{ icon('upload') }}Choose a photo</button>
+          <button type="button" class="btn btn-ghost" id="cameraBtn">{{ icon('camera') }}Take a photo</button>
+        </div>
+        <input type="file" id="imageInput" accept="image/png,image/jpeg,image/gif,image/bmp,image/webp" hidden>
+        <input type="file" id="captureInput" accept="image/*" capture="environment" hidden>
+      </div>
+
+      <div id="uploadStatus" class="upload-status" role="status" aria-live="polite"></div>
+
+      <div class="preview" id="preview">
+        <img id="previewImg" alt="Preview of the selected photo">
+        <div class="meta"><b id="previewName"></b><span class="hint" id="previewSize"></span>
+          <ul class="prechecks" id="prechecks" aria-label="Quick photo checks"></ul>
+        </div>
+        <button type="button" class="icon-btn" id="removeImage" aria-label="Remove photo">{{ icon('x') }}</button>
+      </div>
+      <p class="hint" id="precheckNote" hidden>Quick check done on your device only, to help you retake a weak photo. It is not a medical check. A full check runs when you analyse.</p>
+
+      <div class="upload-progress" id="uploadProgress" hidden>
+        <div class="progress" aria-hidden="true"><span id="uploadBar"></span></div>
+        <div class="up-row"><span id="uploadStage">Uploading…</span><button type="button" class="link-btn" id="cancelUpload">Cancel</button></div>
+      </div>
+
+      <details class="photo-guide">
+        <summary>How to take a photo that can be assessed</summary>
+        <ul class="photo-tips">
+          <li>Use bright, even light, such as daylight near a window. Avoid the flash and glare.</li>
+          <li>Hold the phone steady, tap the screen to focus, and fill the frame with the affected area.</li>
+          <li>Take one close-up and, if you can, one wider shot. Put a coin or your hand next to it for scale.</li>
+          <li>Don't use filters or edit the photo, and clean the lens first.</li>
+        </ul>
+      </details>
+
+      <div class="actions"><button type="button" class="btn" id="analyzeBtn" disabled>{{ icon('shield') }}Analyze photo</button></div>
+      <div class="loading" id="imageLoading" role="status"><span class="spinner"></span>Checking the photo and analysing it…</div>
+      <div class="result" id="imageResult" aria-live="polite"></div>
+    </section>
+
+    <section class="panel" id="symptoms" aria-labelledby="sym-h">
+      <div class="panel-head">
+        <span class="panel-icon">{{ icon('stethoscope') }}</span>
+        <h2 id="sym-h">Check your symptoms</h2>
+      </div>
+
+      {% if not ai_connected %}
+      <div class="alert alert-warn" role="note"><strong>AI is not connected.</strong> The emergency check only recognises common English wordings and can miss serious problems. If it might be urgent, don't wait: call <a href="tel:{{ emergency_number }}">{{ emergency_number }}</a>.</div>
+      {% endif %}
+      <div id="symIntro">
+        <p class="hint" style="margin-top:0">Describe what's happening. I'll then ask a few short questions (how long, how bad, anything else) so the result fits you. You can skip any of them.</p>
+        <div class="chips" aria-label="Quick add">
+          {% for s in ['Fever', 'Headache', 'Cough', 'Sore throat', 'Stomach pain', 'Nausea', 'Dizziness', 'Rash'] %}
+          <button type="button" class="chip" data-chip="{{ s|lower }}">+ {{ s }}</button>
+          {% endfor %}
+        </div>
+        <div class="field" style="margin-bottom:0">
+          <label for="symptomsInput" class="sr-only">Describe your symptoms</label>
+          <textarea id="symptomsInput" maxlength="{{ max_symptom_length }}" data-max="{{ max_symptom_length }}"
+                    placeholder="Example: Fever and sore throat since yesterday. I'm 34 and take no regular medicines."></textarea>
+          <div class="counter"><span id="symCount">0</span> / {{ max_symptom_length }}</div>
+        </div>
+        <div class="actions"><button type="button" class="btn" id="checkSymptomsBtn">{{ icon('stethoscope') }}Start symptom check</button></div>
+      </div>
+
+      <div class="interview" id="symInterview" hidden>
+        <div class="iv-top">
+          <span id="ivProgressText" class="muted">Question 1</span>
+          <div class="progress" aria-hidden="true"><span id="ivBar"></span></div>
+        </div>
+        <div class="iv-sos">{{ icon('alert') }}<span>Severe symptoms? Don't wait: call <a href="tel:{{ emergency_number }}">{{ emergency_number }}</a>.</span></div>
+        <h3 id="ivQuestion" class="iv-question"></h3>
+        <p class="hint" id="ivWhy" hidden></p>
+        <div id="ivOptions" class="iv-options"></div>
+        <div class="alert alert-error" id="ivError" role="alert" hidden></div>
+        <div class="actions">
+          <button type="button" class="btn" id="ivNext" disabled>Next</button>
+          <button type="button" class="btn btn-ghost" id="ivSkip">Skip</button>
+        </div>
+        <div class="iv-links">
+          <button type="button" class="link-btn" id="ivFinish">Get my assessment now</button>
+          <button type="button" class="link-btn" id="ivCancel">Cancel</button>
+        </div>
+      </div>
+
+      <div class="loading" id="symptomLoading" role="status"><span class="spinner"></span>Reviewing your symptoms…</div>
+      <div class="result" id="symptomResult" aria-live="polite"></div>
+    </section>
+  </div>
+
+  <section class="panel" aria-labelledby="recent-h">
+    <div class="page-head" style="margin-bottom:.4rem">
+      <h2 id="recent-h" style="margin:0">Recent checks</h2>
+      {% if recent %}<a href="/history">View all</a>{% endif %}
+    </div>
+    {% if recent %}
+    <ul class="recent" id="recentList">
+      {% for e in recent %}
+      {% set level = (e.urgency if e.type == 'image' else e.urgency_level) or 'medium' %}
+      <li>
+        <span class="dot {{ level }}" title="{{ level }} urgency"></span>
+        <span class="what">
+          {% if e.type == 'image' %}{{ (e.detected_conditions[0] if e.detected_conditions else e.original_filename) or 'Photo check' }}
+          {% else %}{{ (e.possible_conditions[0] if e.possible_conditions else e.symptom_text) }}{% endif %}
+        </span>
+        <span class="when">{{ 'Photo' if e.type == 'image' else 'Symptoms' }} · {{ e.created_at[:10] }}</span>
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="empty">Nothing here yet. Your checks will show up here after you run one.</p>
+    {% endif %}
+  </section>
+
+  <dialog id="cameraDialog" class="cam-dialog" aria-labelledby="camTitle">
+    <div class="cam">
+      <h3 id="camTitle">Take a photo</h3>
+      <p class="hint">Hold steady, fill the frame with the affected area, and use good light.</p>
+      <div class="cam-stage"><video id="camVideo" autoplay playsinline muted></video><div class="cam-msg" id="camMsg" hidden></div></div>
+      <canvas id="camCanvas" hidden></canvas>
+      <div class="actions">
+        <button type="button" class="btn" id="camShot">{{ icon('camera') }}Capture</button>
+        <button type="button" class="btn btn-ghost" id="camSwitch" hidden>Switch camera</button>
+        <button type="button" class="btn btn-ghost" id="camClose">Cancel</button>
+      </div>
+    </div>
+  </dialog>
+
+  <div class="notice" style="margin-top:1.5rem">{{ icon('info') }}<span>Educational use only. Quick Aid can be wrong and cannot examine you. When in doubt, see a doctor.</span></div>
+</div>
+
+{% else %}
+{# ======================= LANDING ======================= #}
+<section class="hero">
+  <div>
+    <h1>Know what to do in the first few minutes.</h1>
+    <p class="lead">Upload a photo of an injury or describe how you feel. Quick Aid tells you how urgent it looks and what to do next, step by step.</p>
+    <div class="hero-cta">
+      <a class="btn btn-lg" href="/register">Create free account</a>
+      <a class="btn btn-ghost btn-lg" href="/login">Log in</a>
+    </div>
+    <p class="hint" style="margin-top:1rem">Need help right now? Call <strong>{{ emergency_number }}</strong> or see the <a href="/emergency">emergency guide</a>.</p>
+  </div>
+
+  <div class="sample" aria-label="Example result">
+    <div class="sample-label">Example result for “deep cut on forearm, still bleeding”</div>
+    <div class="triage" data-level="high">
+      {{ icon('alert') }}
+      <div>
+        <p class="lvl">Get medical help now</p>
+        <p>Press firmly on the wound and call {{ emergency_number }} if bleeding won't stop.</p>
+      </div>
+    </div>
+    <h3>Do now</h3>
+    <ul>
+      <li>Press a clean cloth firmly on the cut</li>
+      <li>Raise the arm above heart level</li>
+      <li>Add more cloth if it soaks through</li>
+    </ul>
+    <h3>Avoid</h3>
+    <ul>
+      <li>Removing the cloth to check the wound</li>
+    </ul>
+  </div>
+</section>
+
+<section class="steps" aria-label="How it works">
+  <div class="step"><h3>Share what's happening</h3><p>Upload a clear photo, or type your symptoms in your own words.</p></div>
+  <div class="step"><h3>Get a triage level</h3><p>Urgent signs come first, with a plain-language level: low, see a doctor soon, or get help now.</p></div>
+  <div class="step"><h3>Follow clear steps</h3><p>First-aid actions, things to avoid, and when to see a doctor. Results are saved to your private history.</p></div>
+</section>
+
+<div class="notice">{{ icon('info') }}<span><strong>Educational use only.</strong> Quick Aid is not a doctor, can make mistakes and cannot replace professional care. In an emergency call {{ emergency_number }}.</span></div>
+
+<footer class="footer">
+  <span>Built by Santosh Madannavar</span>
+  <a href="https://github.com/Santosh02411" rel="noopener">GitHub</a>
+  <a href="https://linkedin.com/in/santosh-madannavar-3ba5a7261" rel="noopener">LinkedIn</a>
+</footer>
+{% endif %}
+{% endblock %}

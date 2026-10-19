@@ -1,0 +1,96 @@
+{
+ "schema": 1,
+ "note": "Edit a dataset, then run: python evaluation/manage_datasets.py bump <name> --note \"what changed\". Frozen sets cannot be bumped.",
+ "datasets": {
+  "symptom_cases": {
+   "file": "symptom_cases.json",
+   "role": "dev",
+   "purpose": "Main development set. Rules and prompts were tuned while it was written: results are in-sample and optimistic.",
+   "frozen": false,
+   "version": "1.0.0",
+   "sha256": "58122a89b583bfb7358263ab7e3d914cbef07ca6a0b0103885de108ad5c3d23f",
+   "cases": 98,
+   "labelled_by": "project developers",
+   "clinician_reviewed": false,
+   "changelog": [
+    {
+     "version": "1.0.0",
+     "date": "2026-10-16",
+     "note": "Initial versioned release."
+    }
+   ]
+  },
+  "symptom_holdout": {
+   "file": "symptom_holdout.json",
+   "role": "held-out (used for fixes: no longer unseen)",
+   "purpose": "Written after tuning; its misses were then fixed, so it is no longer an unbiased test.",
+   "frozen": true,
+   "version": "1.0.0",
+   "sha256": "dce2fa7bda3230693f30868e882f11a9d328571f38fa5fec8e7a8cdb3b826d38",
+   "cases": 43,
+   "labelled_by": "project developers",
+   "clinician_reviewed": false,
+   "changelog": [
+    {
+     "version": "1.0.0",
+     "date": "2026-10-16",
+     "note": "Initial versioned release."
+    }
+   ]
+  },
+  "symptom_holdout2": {
+   "file": "symptom_holdout2.json",
+   "role": "held-out (fresh, frozen)",
+   "purpose": "Fresh realistic phrasing, run once after the last rule change. The best available generalisation estimate. Do not tune against it.",
+   "frozen": true,
+   "version": "1.0.0",
+   "sha256": "80e933724c73160967be8b367cd25e38e174f6a169dedd7e8ff10cf5e287d453",
+   "cases": 50,
+   "labelled_by": "project developers",
+   "clinician_reviewed": false,
+   "changelog": [
+    {
+     "version": "1.0.0",
+     "date": "2026-10-16",
+     "note": "Initial versioned release."
+    }
+   ]
+  },
+  "model_output_cases": {
+   "file": "model_output_cases.json",
+   "role": "guardrail",
+   "purpose": "Deliberately unsafe or malformed model answers fed through the real parsing and triage code.",
+   "frozen": false,
+   "version": "1.0.0",
+   "sha256": "7696dc64d5eda66cb248f1631c31c9d04ee4117a81d3fb359511f2beeed7e891",
+   "cases": 24,
+   "labelled_by": "project developers",
+   "clinician_reviewed": false,
+   "changelog": [
+    {
+     "version": "1.0.0",
+     "date": "2026-10-16",
+     "note": "Initial versioned release."
+    }
+   ]
+  },
+  "image_quality_cases": {
+   "file": "image_quality_cases.json",
+   "role": "synthetic",
+   "purpose": "Generated photos with known blur, darkness, size and glare. Tests the quality CHECKS, not medical judgement.",
+   "frozen": false,
+   "version": "1.0.0",
+   "sha256": "740c611bd35f1d01bd814e858e238ffc0029540850f6fe427c2eaddfac3e02e2",
+   "cases": 12,
+   "labelled_by": "project developers",
+   "clinician_reviewed": false,
+   "changelog": [
+    {
+     "version": "1.0.0",
+     "date": "2026-10-16",
+     "note": "Initial versioned release."
+    }
+   ]
+  }
+ }
+}

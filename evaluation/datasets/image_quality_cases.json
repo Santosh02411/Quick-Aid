@@ -1,0 +1,122 @@
+{
+ "name": "Synthetic photo-quality cases",
+ "note": "Images are generated deterministically (seeded noise texture + a red patch). They test the quality CHECKS, not medical judgement.",
+ "cases": [
+  {
+   "id": "Q01",
+   "generator": "sharp",
+   "size": 600,
+   "expected_rating_in": [
+    "good"
+   ],
+   "expected_unusable": false
+  },
+  {
+   "id": "Q02",
+   "generator": "sharp",
+   "size": 900,
+   "expected_rating_in": [
+    "good"
+   ],
+   "expected_unusable": false
+  },
+  {
+   "id": "Q03",
+   "generator": "blur",
+   "size": 600,
+   "radius": 14,
+   "expected_rating_in": [
+    "poor"
+   ],
+   "expected_unusable": false
+  },
+  {
+   "id": "Q04",
+   "generator": "blur",
+   "size": 600,
+   "radius": 5,
+   "expected_rating_in": [
+    "fair",
+    "poor"
+   ],
+   "expected_unusable": false
+  },
+  {
+   "id": "Q05",
+   "generator": "dark",
+   "size": 600,
+   "factor": 0.1,
+   "expected_rating_in": [
+    "poor"
+   ],
+   "expected_unusable": true
+  },
+  {
+   "id": "Q06",
+   "generator": "dark",
+   "size": 600,
+   "factor": 0.35,
+   "expected_rating_in": [
+    "fair",
+    "good"
+   ],
+   "expected_unusable": false
+  },
+  {
+   "id": "Q07",
+   "generator": "bright",
+   "size": 600,
+   "expected_rating_in": [
+    "fair",
+    "poor"
+   ],
+   "expected_unusable": false
+  },
+  {
+   "id": "Q08",
+   "generator": "tiny",
+   "size": 50,
+   "expected_rating_in": [
+    "poor"
+   ],
+   "expected_unusable": true
+  },
+  {
+   "id": "Q09",
+   "generator": "small",
+   "size": 200,
+   "expected_rating_in": [
+    "fair"
+   ],
+   "expected_unusable": false
+  },
+  {
+   "id": "Q10",
+   "generator": "blank",
+   "size": 600,
+   "expected_rating_in": [
+    "poor"
+   ],
+   "expected_unusable": true
+  },
+  {
+   "id": "Q11",
+   "generator": "black",
+   "size": 600,
+   "expected_rating_in": [
+    "poor"
+   ],
+   "expected_unusable": true
+  },
+  {
+   "id": "Q12",
+   "generator": "glare",
+   "size": 600,
+   "expected_rating_in": [
+    "fair",
+    "poor"
+   ],
+   "expected_unusable": false
+  }
+ ]
+}

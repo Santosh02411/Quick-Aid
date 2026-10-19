@@ -5,8 +5,8 @@ and multi-turn follow-up conversation support.
 
 import pytest
 from unittest.mock import MagicMock
-from localization import localize_text, localize_analysis, fever_threshold_text, get_region_info, REGIONS
-from conversation import ConversationService, NO_GEMINI_MESSAGE
+from quickaid.core.localization import localize_text, localize_analysis, fever_threshold_text, get_region_info, REGIONS
+from quickaid.ai.conversation import ConversationService, NO_GEMINI_MESSAGE
 
 
 # ---------------------------------------------------------------------------
@@ -143,7 +143,7 @@ class TestFollowUpEndpoint:
 
         client.post('/logout')
         client.post('/register', data={
-            'username': 'otheruser', 'email': 'other@example.com', 'password': 'supersecret123'
+            'username': 'otheruser', 'email': 'other@example.com', 'password': 'supersecret123', 'confirm_password': 'supersecret123'
         })
 
         resp = client.post('/api/follow_up', json={
@@ -200,7 +200,7 @@ class TestRegionEndpoints:
     def test_register_with_region(self, client):
         resp = client.post('/register', data={
             'username': 'regionuser', 'email': 'regionuser@example.com',
-            'password': 'supersecret123', 'region': 'IN'
+            'password': 'supersecret123', 'confirm_password': 'supersecret123', 'region': 'IN'
         })
         assert resp.status_code == 302
 

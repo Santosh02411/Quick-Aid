@@ -1,0 +1,11 @@
+{% extends 'base.html' %}
+{% set active_page = 'docs' %}
+{% block title %}API documentation{% endblock %}
+{% block content %}
+<div class="page api-docs" id="apiDocs">
+  <div class="page-head"><h1>Quick Aid API</h1><a class="btn btn-ghost btn-sm" href="/api/openapi.json">OpenAPI JSON</a></div>
+  <p class="muted" id="apiIntro">Loading…</p>
+  <div id="apiTags"></div>
+</div>
+{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='js/docs.js') }}" defer></script>{% endblock %}

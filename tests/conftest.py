@@ -36,7 +36,7 @@ def db_module(temp_db_path):
     earlier test or a real run.
     """
     import importlib
-    import database
+    from quickaid.core import database
     importlib.reload(database)
     database.init_db()
     return database
@@ -50,10 +50,10 @@ def app(temp_db_path, monkeypatch):
     monkeypatch.setenv('DATABASE_PATH', temp_db_path)
 
     import importlib
-    import database
+    from quickaid.core import database
     importlib.reload(database)
 
-    import app as app_module
+    from quickaid import app as app_module
     importlib.reload(app_module)
 
     app_module.app.config.update({
@@ -72,5 +72,5 @@ def client(app):
 def registered_user(client):
     """Register a user and return their credentials; client stays logged in."""
     creds = {'username': 'testuser', 'email': 'testuser@example.com', 'password': 'supersecret123'}
-    client.post('/register', data=creds)
+    client.post('/register', data={**creds, 'confirm_password': creds['password']})
     return creds

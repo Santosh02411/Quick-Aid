@@ -1,0 +1,133 @@
+{% extends 'base.html' %}
+{% from '_macros.html' import icon, password_field %}
+{% set active_page = 'account' %}
+{% block title %}Account{% endblock %}
+{% block content %}
+<div class="page-narrow">
+  <div class="page-head"><h1>Account settings</h1></div>
+
+  {% if error %}<div class="alert alert-error" role="alert">{{ error }}</div>{% endif %}
+  {% if success %}<div class="alert alert-success" role="status">{{ success }}</div>{% endif %}
+
+  <section class="panel" style="margin-bottom:1.25rem">
+    <h2>Profile</h2>
+    <p class="muted">Update your username or email address.</p>
+    <form method="POST" action="/account/profile">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div class="field">
+        <label for="username">Username</label>
+        <input type="text" id="username" name="username" value="{{ account_user.username }}" required pattern="[A-Za-z0-9_]{3,30}">
+      </div>
+      <div class="field">
+        <label for="email">Email
+          {% if account_user.email_verified %}<span class="badge badge-ok">Verified</span>{% else %}<span class="badge badge-warn">Not verified</span>{% endif %}
+        </label>
+        <input type="email" id="email" name="email" value="{{ account_user.email }}" required>
+      </div>
+      {% if account_user.has_password %}
+        {{ password_field('profile_current_password', 'current_password', 'Current password', required=false, hint='Needed to confirm a change.') }}
+      {% endif %}
+      <button type="submit" class="btn">Save profile</button>
+    </form>
+    {% if not account_user.email_verified %}
+    <form method="POST" action="/account/resend-verification" style="margin-top:.8rem">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button type="submit" class="btn btn-ghost btn-sm">Resend verification email</button>
+    </form>
+    {% endif %}
+  </section>
+
+  <section class="panel" style="margin-bottom:1.25rem">
+    <h2>{{ 'Change password' if account_user.has_password else 'Set a password' }}</h2>
+    <p class="muted">
+      {% if account_user.has_password %}Choose a new password for your account.
+      {% else %}You currently sign in with Google only. Set a password to also log in directly.{% endif %}
+    </p>
+    <form method="POST" action="/account/password" data-password-form>
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      {% if account_user.has_password %}
+        {{ password_field('current_password', 'current_password', 'Current password') }}
+      {% endif %}
+      {{ password_field('new_password', 'new_password', 'New password', autocomplete='new-password', minlength=8, strength=true) }}
+      {{ password_field('confirm_password', 'confirm_password', 'Confirm new password', autocomplete='new-password', minlength=8, match='new_password') }}
+      <button type="submit" class="btn">{{ 'Update password' if account_user.has_password else 'Set password' }}</button>
+    </form>
+  </section>
+
+  <section class="panel" style="margin-bottom:1.25rem">
+    <h2>Region</h2>
+    <p class="muted">Sets the emergency numbers and units used in the app and in advice.</p>
+    <div class="field" style="margin-bottom:.4rem">
+      <label for="regionSelect">Where are you?</label>
+      <select id="regionSelect" data-region-select>
+        {% for code, label in region_options %}<option value="{{ code }}" {% if code == region_code %}selected{% endif %}>{{ label }}</option>{% endfor %}
+      </select>
+    </div>
+    <div class="match-msg" id="regionMsg" aria-live="polite"></div>
+  </section>
+
+  <section class="panel" style="margin-bottom:1.25rem">
+    <h2>Two-factor sign-in</h2>
+    <p class="muted">Add a second step with an authenticator app.</p>
+    <p>{% if account_user.totp_enabled %}<span class="badge badge-ok">Turned on</span>{% else %}<span class="badge badge-warn">Turned off</span>{% endif %}</p>
+    {% if account_user.totp_enabled %}
+    <form method="POST" action="/account/2fa/disable" data-confirm="Turn off two-factor sign-in for your account?">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      {% if account_user.has_password %}
+        {{ password_field('disable_2fa_password', 'current_password', 'Current password') }}
+      {% endif %}
+      <button type="submit" class="btn btn-outline-danger">Turn off two-factor</button>
+    </form>
+    {% else %}
+    <a class="btn" href="/account/2fa/setup">Set up two-factor</a>
+    {% endif %}
+  </section>
+
+  {% if account_user.oauth_provider %}
+  <section class="panel" style="margin-bottom:1.25rem">
+    <h2>Connected accounts</h2>
+    <p class="muted">External accounts linked for sign-in.</p>
+    <span class="badge badge-ok">Google connected</span>
+  </section>
+  {% endif %}
+
+  <section class="panel" style="margin-bottom:1.25rem" id="your-data">
+    <h2>Your data</h2>
+    <p class="muted">You have {{ saved_counts.symptom }} symptom check{{ '' if saved_counts.symptom == 1 else 's' }} and {{ saved_counts.image }} photo check{{ '' if saved_counts.image == 1 else 's' }} saved. Photos themselves are never kept. They are deleted right after analysis.</p>
+    <div class="field">
+      <label for="retentionSelect">Keep my saved checks and chats for</label>
+      <select id="retentionSelect" data-retention-select>
+        {% for c in retention.choices %}
+        <option value="{{ c.days }}" {% if retention.effective_days == c.days and not retention.using_default %}selected{% endif %}>{{ c.label }}</option>
+        {% endfor %}
+        <option value="default" {% if retention.using_default %}selected{% endif %}>Default ({{ 'until I delete it' if retention.default_days == 0 else retention.default_days ~ ' days' }})</option>
+      </select>
+      <div class="hint">Older entries are deleted automatically by a daily clean-up. You can also delete any entry yourself at any time.</div>
+      <div class="match-msg" id="retentionMsg" aria-live="polite"></div>
+    </div>
+    <div class="actions" style="flex-wrap:wrap">
+      <a class="btn btn-ghost btn-sm" href="/api/history/export?format=json">{{ icon('upload') }}Download everything (JSON)</a>
+      <a class="btn btn-ghost btn-sm" href="/api/history/export?format=csv">Download summary (CSV)</a>
+      <a class="btn btn-ghost btn-sm" href="/privacy">How your data is handled</a>
+      <button type="button" class="btn btn-outline-danger btn-sm" id="clearHistoryBtn">{{ icon('trash') }}Delete all my history</button>
+    </div>
+  </section>
+
+  <section class="panel danger-zone">
+    <h2>Delete account</h2>
+    <p class="muted">Permanently deletes your account and all saved history. This cannot be undone.</p>
+    <form method="POST" action="/account/delete" data-confirm="This permanently deletes your account and all history. Continue?">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      {% if account_user.has_password %}
+        {{ password_field('delete_current_password', 'current_password', 'Current password') }}
+      {% endif %}
+      <div class="field">
+        <label for="confirm_text">Type <strong>DELETE</strong> to confirm</label>
+        <input type="text" id="confirm_text" name="confirm_text" required placeholder="DELETE" autocomplete="off">
+      </div>
+      <button type="submit" class="btn btn-danger">Delete my account</button>
+    </form>
+  </section>
+</div>
+{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='js/history.js') }}" defer></script>{% endblock %}
