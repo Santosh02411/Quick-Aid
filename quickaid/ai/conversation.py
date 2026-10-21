@@ -146,8 +146,12 @@ class ConversationService:
                         'flagged': False, 'mode': 'error', 'emergency': None}
             return {'answer': self._guard_output(answer, region, self._analysis_level(analysis_summary)), 'flagged': False, 'mode': 'ai', 'emergency': None}
         except Exception:
+            # Step 1 above already scanned `question` for emergency wording before this try block was ever reached, so
+            # whatever failed here happened on text already found not to describe a warning sign on its own - but the
+            # scan is not perfect, so the reminder stays, same as every other crash fallback in the app.
             logger.error("Gemini chat request failed", exc_info=True)
-            return {'answer': "Sorry, I couldn't process that question right now. Please try again, or consult a healthcare professional directly.",
+            return {'answer': "Sorry, I couldn't process that question right now. Please try again, or consult a healthcare professional directly. "
+                              + localize_text('If this might be an emergency, call {EMERGENCY_NUMBER} now rather than waiting.', region),
                     'flagged': False, 'mode': 'error', 'emergency': None}
 
     # ------------------------------------------------------------------ safety helpers

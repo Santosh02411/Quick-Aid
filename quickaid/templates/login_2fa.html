@@ -7,10 +7,17 @@
 <form method="POST">
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
   <div class="field">
-    <label for="code" class="sr-only">6-digit code</label>
-    <input type="text" id="code" name="code" class="code-input" inputmode="numeric" pattern="[0-9]*" maxlength="6" autocomplete="one-time-code" required autofocus placeholder="000000">
+    <label for="code" class="sr-only">6-digit code, or a recovery code</label>
+    <!-- Accepts BOTH a 6-digit authenticator code and an 11-character recovery code (XXXXX-XXXXX): inputmode="text"
+         so phone keyboards can type letters (a numeric keypad physically cannot), maxlength and pattern wide enough
+         for the recovery-code format, and autocapitalize off so a typed code is not silently altered before it is
+         sent. The server accepts either format from this one field (see database.py consume_recovery_code /
+         verify_code_step) and tells them apart by shape, so the person never has to pick which kind they are using. -->
+    <input type="text" id="code" name="code" class="code-input" inputmode="text" pattern="[0-9A-Za-z\-]*" maxlength="14"
+           autocomplete="one-time-code" autocapitalize="characters" autocorrect="off" spellcheck="false" required autofocus placeholder="000000">
   </div>
   <button type="submit" class="btn btn-block btn-lg">Verify</button>
 </form>
+<p class="hint">Lost access to your authenticator app? Enter one of your recovery codes instead.</p>
 <p class="auth-switch"><a href="/login">Back to log in</a></p>
 {% endblock %}

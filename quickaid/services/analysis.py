@@ -16,7 +16,7 @@ from quickaid.ai.upload_validation import validate_upload
 from quickaid.api.responses import ApiError
 from quickaid.api.validation import symptom_text
 from quickaid.core import database as db, secure_files
-from quickaid.core.localization import get_app_region
+from quickaid.core.localization import get_app_region, localize_text
 from quickaid.core.logging_config import get_logger
 from quickaid.services import safety
 
@@ -33,14 +33,27 @@ class AnalysisService:
 
     def analyze_symptoms(self, user_id: int, data: Dict) -> Dict:
         text = symptom_text(data)
+        region = get_app_region()
         try:
             result = safety.review_symptom_result(self.symptom_checker.analyze_symptoms(text), text)
-            analysis_id = db.save_symptom_analysis(user_id, text, result)
         except ApiError:
             raise
         except Exception as e:
+            # The analyzer itself already has its own last-resort emergency check (see symptom_checker.py), so this
+            # is a second, independent layer in case something breaks between there and here instead.
             logger.error("Symptom analysis failed for user_id=%s", user_id, exc_info=True)
-            raise ApiError(f'Symptom analysis failed: {e}', 500, 'analysis_failed')
+            urgent_now = safety.last_resort_emergency_check(text, 'Analysis failed, but your description includes a warning sign.', region)
+            if urgent_now:
+                return {'analysis': urgent_now, 'analysis_id': None}
+            raise ApiError(f'Symptom analysis failed: {e}', 500, 'analysis_failed',
+                           hints=[localize_text('If this might be an emergency, call {EMERGENCY_NUMBER} now rather than waiting.', region)])
+        # The result is already computed (and correct, including any emergency guidance) at this point: if SAVING it
+        # to history fails, the person still gets to see it. It just will not appear in their history afterwards.
+        try:
+            analysis_id = db.save_symptom_analysis(user_id, text, result)
+        except Exception:
+            logger.error("Symptom analysis succeeded but could not be saved for user_id=%s", user_id, exc_info=True)
+            analysis_id = None
         return {'analysis': result, 'analysis_id': analysis_id}
 
     # ---------------------------------------------------------------- photo
@@ -65,7 +78,9 @@ class AnalysisService:
         except Exception as e:
             logger.error("Image analysis failed for user_id=%s", user_id, exc_info=True)
             raise ApiError('The analysis failed on our side. Please try again in a moment.', 500, 'analysis_failed',
-                           hints=['If it keeps happening, try a different photo.'], detail=str(e)[:200])
+                           hints=['If it keeps happening, try a different photo.',
+                                  localize_text('If this looks serious, do not wait for a photo check: call {EMERGENCY_NUMBER} now or see a doctor.', get_app_region())],
+                           detail=str(e)[:200])
         finally:
             if os.path.exists(path):              # the photo is never kept, even if analysis crashed
                 secure_files.secure_remove(path)
@@ -98,8 +113,12 @@ class AnalysisService:
         except ApiError:
             raise
         except Exception as e:
+            # By this point self.interview_engine.start() has ALREADY run its own immediate_emergency() check as its
+            # very first step (see interview.py), so whatever failed here happened after the text was already found
+            # not to describe a warning sign on its own. Still worth a reminder, since the person may be mid-interview.
             logger.error("Interview start failed for user_id=%s", user_id, exc_info=True)
-            raise ApiError(f'Could not start the check: {e}', 500, 'interview_failed')
+            raise ApiError(f'Could not start the check: {e}', 500, 'interview_failed',
+                           hints=[localize_text('If this might be an emergency, call {EMERGENCY_NUMBER} now rather than waiting.', region)])
 
     @staticmethod
     def _load_interview(user_id: int, data: Dict):
@@ -132,7 +151,8 @@ class AnalysisService:
             raise
         except Exception as e:
             logger.error("Interview answer failed for user_id=%s", user_id, exc_info=True)
-            raise ApiError(f'Could not process that answer: {e}', 500, 'interview_failed')
+            raise ApiError(f'Could not process that answer: {e}', 500, 'interview_failed',
+                           hints=[localize_text('If this might be an emergency, call {EMERGENCY_NUMBER} now rather than waiting.', region)])
 
     def interview_finish(self, user_id: int, data: Dict) -> Dict:
         """'Get my assessment now': assess with whatever has been answered so far."""
@@ -144,4 +164,5 @@ class AnalysisService:
             raise
         except Exception as e:
             logger.error("Interview finish failed for user_id=%s", user_id, exc_info=True)
-            raise ApiError(f'Could not create the assessment: {e}', 500, 'interview_failed')
+            raise ApiError(f'Could not create the assessment: {e}', 500, 'interview_failed',
+                           hints=[localize_text('If this might be an emergency, call {EMERGENCY_NUMBER} now rather than waiting.', state.get('region') or get_app_region())])

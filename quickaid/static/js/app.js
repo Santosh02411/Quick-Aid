@@ -180,6 +180,38 @@
       var card = doc.getElementById('statUrgent');
       if (card) card.parentNode.classList.add('stat-alert');
     }
+    prependRecentCheck(kind, analysis);
+  }
+
+  // Without this, the stat numbers above tick up live but "Recent checks" stayed on whatever the page showed when
+  // it was first loaded (server-rendered only) - right after finishing a check, especially an emergency one, a
+  // person could see "1 flagged as urgent" directly above a list still saying "Nothing here yet" and reasonably
+  // wonder whether the check was actually saved. This mirrors the server-rendered row in index.html exactly (same
+  // classes, same fields, same 5-item cap as history.dashboard()'s limit) so the two never visibly disagree.
+  function prependRecentCheck(kind, analysis) {
+    var panel = doc.querySelector('#recent-h');
+    if (!panel) return;
+    var section = panel.closest('section');
+    var empty = section.querySelector('.empty');
+    var list = doc.getElementById('recentList');
+    if (!list) {
+      list = h('ul', { class: 'recent', id: 'recentList' });
+      if (empty) { empty.replaceWith(list); } else { section.appendChild(list); }
+      var viewAll = section.querySelector('a[href="/history"]');
+      if (!viewAll) panel.parentNode.appendChild(h('a', { href: '/history' }, 'View all'));
+    }
+    var level = (kind === 'image' ? analysis.urgency : analysis.urgency_level) || 'medium';
+    // Match index.html's own fallback exactly (e.possible_conditions[0] or else e.symptom_text), so this live-added
+    // row never visibly disagrees with what the SAME entry shows after a normal page reload a moment later.
+    var what = (kind === 'image' ? (analysis.detected_conditions || [])[0] : (analysis.possible_conditions || [])[0])
+      || (kind === 'symptom' && symInput ? symInput.value.trim() : '') || (kind === 'image' ? 'Photo check' : 'Symptom check');
+    var when = (kind === 'image' ? 'Photo' : 'Symptoms') + ' \u00b7 ' + new Date().toISOString().slice(0, 10);
+    var row = h('li', {},
+      h('span', { class: 'dot ' + level, title: level + ' urgency' }),
+      h('span', { class: 'what' }, what),
+      h('span', { class: 'when' }, when));
+    list.insertBefore(row, list.firstChild);
+    while (list.children.length > 5) list.removeChild(list.lastChild);
   }
 
   function renderError(container, message) {

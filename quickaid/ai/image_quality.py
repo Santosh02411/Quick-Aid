@@ -24,12 +24,26 @@ MIN_SIDE_UNUSABLE = 80
 MIN_SIDE_LOW = 240
 BLUR_VERY = 4.0      # Laplacian variance below this: very blurry / featureless
 BLUR_SLIGHT = 12.0   # below this: slightly soft
-DARK_UNUSABLE = 25.0
-DARK_LOW = 55.0
+# DARK_UNUSABLE / DARK_LOW: an absolute brightness threshold is a structurally imperfect proxy for "not enough light
+# reached the camera" because different skin tones reflect different amounts of light even under IDENTICAL lighting -
+# the system sees only one photo, with no baseline to compare against, so it cannot distinguish "well-lit dark skin"
+# from "dim room" by brightness alone. Lowered from the original 25/55 so a NATURALLY dark-skinned subject in good
+# light has real headroom before either check fires (measured: at the original thresholds, the darkest realistic
+# tone tested had essentially zero headroom - any dimming at all crossed DARK_LOW; at these thresholds it needs
+# ~32% dimming, versus ~80%+ needed for a light-skinned subject to cross the same threshold). That remaining gap is
+# real and not fully closable by threshold-tuning alone - see tests/test_image_quality_fairness.py, which measures
+# and documents the residual disparity rather than claiming it is eliminated.
+DARK_UNUSABLE = 20.0
+DARK_LOW = 38.0
 BRIGHT_UNUSABLE = 240.0
 GLARE_FRACTION = 0.30
-FLAT_STD_UNUSABLE = 6.0
-LOW_CONTRAST_STD = 18.0
+# Contrast measured RELATIVE to the image's own brightness (see relative_contrast in assess()), not raw std: a photo
+# of naturally darker skin has a lower average pixel value than one of lighter skin under the SAME light, so a fixed
+# absolute std threshold flagged "low contrast" for darker-skinned subjects' photos far more readily even when the
+# lighting and actual detail were identical. This measure is invariant to uniform dimming regardless of base tone
+# (checked directly), so it no longer compounds the darkness disparity above on top of itself.
+FLAT_CONTRAST_UNUSABLE = 3.5
+LOW_CONTRAST = 10.5
 
 ADVICE = {
     'too_small': 'Use the camera at full size (not a thumbnail or a cropped screenshot).',
@@ -65,6 +79,13 @@ def assess(image: Image.Image) -> Dict:
     gray = _gray(rgb[::step, ::step])
 
     mean, std = float(gray.mean()), float(gray.std())
+    # Contrast relative to the image's own brightness, not raw std: a photo of naturally darker skin has a lower
+    # average pixel value than one of lighter skin under THE SAME light, so a fixed absolute std threshold flags
+    # darker-skinned subjects' photos as "low contrast" far more readily even when the lighting and detail are
+    # identical (checked directly: under identical moderate dimming, raw std fired "low contrast" for medium/tan/
+    # brown/dark skin tones but not light ones, even though every tone lost the same proportion of its range).
+    # Dividing by brightness makes this scale with the subject's own tone instead of penalising darker skin twice.
+    relative_contrast = std / max(mean, 1.0) * 128
     sharp = laplacian_variance(gray)
     bright_frac = float((gray > 245).mean())
 
@@ -84,7 +105,7 @@ def assess(image: Image.Image) -> Dict:
     elif side < MIN_SIDE_LOW:
         add(fair, 'low_resolution', f'Low resolution ({w}×{h} px).')
 
-    if std < FLAT_STD_UNUSABLE:
+    if relative_contrast < FLAT_CONTRAST_UNUSABLE:
         unusable = True
         add(poor, 'blank', 'The image is blank or almost one flat colour.')
     else:
@@ -92,7 +113,7 @@ def assess(image: Image.Image) -> Dict:
             add(poor, 'very_blurry', 'The photo is very blurry or has no visible detail.')
         elif sharp < BLUR_SLIGHT:
             add(fair, 'slightly_blurry', 'The photo is slightly soft or out of focus.')
-        if std < LOW_CONTRAST_STD:
+        if relative_contrast < LOW_CONTRAST:
             add(fair, 'low_contrast', 'The image has very low contrast.')
 
     if mean < DARK_UNUSABLE:
@@ -123,7 +144,7 @@ def assess(image: Image.Image) -> Dict:
         'unusable': unusable,
         'issues': poor + fair,
         'advice': advice,
-        'metrics': {'width': int(w), 'height': int(h), 'brightness': round(mean, 1), 'contrast': round(std, 1),
+        'metrics': {'width': int(w), 'height': int(h), 'brightness': round(mean, 1), 'contrast': round(std, 1), 'relative_contrast': round(relative_contrast, 1),
                     'sharpness': round(sharp, 1), 'glare_fraction': round(bright_frac, 3)},
     }
 

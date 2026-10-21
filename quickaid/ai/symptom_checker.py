@@ -26,7 +26,7 @@ from quickaid.i18n import prompts as language_prompts
 from quickaid.ai import model_calls, consent, first_aid, telemetry, triage_engine
 from quickaid.ai.schemas import SymptomAssessment, validate_response
 from quickaid.ai.triage_engine import (  # noqa: F401  (re-exported: other modules and tests import these from here)
-    CRISIS_SUPPORT, EMERGENCY_ACTION, EMERGENCY_MESSAGE, engine as triage, negated as _negated, scan_red_flags,
+    CRISIS_SUPPORT, EMERGENCY_ACTION, EMERGENCY_MESSAGE, engine as triage, negated as _negated, resolved as _resolved, scan_red_flags,
 )
 from quickaid.core.localization import get_app_region, localize_text, prompt_context
 from quickaid.core.logging_config import get_logger
@@ -249,9 +249,17 @@ class SymptomChecker:
             return self._analyze_basic_symptoms(symptom_text)
         except Exception as e:
             logger.error("Symptom analysis failed entirely for input length=%d", len(symptom_text), exc_info=True)
+            # However analysis failed, the person is left with NOTHING unless we still look at what they typed: if it
+            # describes a warning sign, they get the full, normal emergency result (exactly as if nothing had gone
+            # wrong) rather than a generic error message with no guidance at all.
+            region = get_app_region()
+            urgent_now = triage_engine.immediate_emergency(symptom_text, region, 'Analysis failed, but your description includes a warning sign.')
+            if urgent_now:
+                return urgent_now
             return {
                 'error': f"Symptom analysis failed: {str(e)}",
-                'recommendations': ['Unable to analyze symptoms. Please consult a healthcare professional.'],
+                'recommendations': ['Unable to analyze symptoms. Please consult a healthcare professional.',
+                                    localize_text('If this might be an emergency, call {EMERGENCY_NUMBER} now rather than waiting.', region)],
                 'disclaimer': 'This tool cannot replace professional medical advice.'
             }
 
@@ -357,7 +365,15 @@ class SymptomChecker:
         """Hand the result to the central triage engine. It can only raise urgency, never lower it."""
         region = get_app_region()
         mode = mode or result.get('analysis_mode') or 'ai'
-        return triage.review_symptom(result, text=raw_text, region=region, mode='ai' if mode == 'ai' else 'basic')
+        # A one-shot message can still carry age, duration and severity ("coughing for 4 weeks", "I'm 8 months pregnant",
+        # "pain is 9/10") - these used to be used only once the person had gone through the question-and-answer interview,
+        # so the very same wording in a single message got none of that benefit. Parsing it here (best-effort; anything
+        # not mentioned just stays unknown) means duration/age/severity floors apply everywhere, not only in interviews.
+        # Local import: interview.py imports SymptomChecker from this module, so importing at module level would cycle.
+        from quickaid.ai.interview import parse_age_group, parse_duration, parse_severity
+        ctx = {'age_group': parse_age_group(raw_text), 'duration': parse_duration(raw_text), 'severity': parse_severity(raw_text),
+               'course': None, 'history': None, 'urgent_flags': [], 'selected': []}
+        return triage.review_symptom(result, text=raw_text, region=region, mode='ai' if mode == 'ai' else 'basic', ctx=ctx)
 
     # ------------------------------------------------------------------ basic fallback
 
@@ -430,14 +446,18 @@ class SymptomChecker:
         return self._apply_safety_net(result, symptom_text, mode='basic')
 
     def _extract_symptoms(self, text: str) -> List[str]:
-        """Extract symptom keys from text: whole-word matching, negation-aware, de-duplicated."""
+        """Extract symptom keys from text: whole-word matching, negation- and resolution-aware, de-duplicated.
+
+        "Resolution-aware" means "the chest pain went away last week" does not register chest_pain as a CURRENT
+        symptom (see triage_engine.resolved() for exactly what it does and does not suppress).
+        """
         text = (text or '').lower()
         found = []
         for symptom, patterns in self._symptom_patterns.items():
             for pattern in patterns:
                 matched = False
                 for m in re.finditer(r'\b(?:' + pattern + r')\b', text):
-                    if not _negated(text, m.start()):
+                    if not _negated(text, m.start()) and not _resolved(text, m.start(), m.end()):
                         matched = True
                         break
                 if matched:

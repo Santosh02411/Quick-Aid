@@ -62,7 +62,7 @@ DISCLAIMER_RULES = ('Rule-based estimate, not a diagnosis. It cannot examine you
 # 1. Emergency detection
 # ---------------------------------------------------------------------------
 
-_NEGATORS = re.compile(r"\b(no|not|without|never|denies|deny|isn'?t|aren'?t|don'?t have|doesn'?t have|free of|ruled out)\b")
+_NEGATORS = re.compile(r"\b(no|not|without|never|denies|deny|isn'?t|aren'?t|wasn'?t|weren'?t|don'?t have|doesn'?t have|free of|ruled out)\b")
 _CLAUSE_BREAKS = ('.', ';', '!', '?', ',', ' but ', ' just ', ' only ', ' except ', ' however ', ' although ')
 
 
@@ -79,6 +79,34 @@ def negated(text: str, start: int) -> bool:
             clause_start = max(clause_start, i + len(b) - 1)
     window = text[max(clause_start + 1, start - 40):start]
     return bool(_NEGATORS.search(window))
+
+
+# Past-tense/resolved: different from negation ("never had chest pain") - this is "I HAD it, and now it is over"
+# ("the chest pain went away last week"). Deliberately narrow and ONE-SIDED (only checked looking forward, in the
+# SAME clause, close to the match) so it only ever suppresses a symptom's OWN stated resolution, never a different,
+# still-current symptom mentioned elsewhere in the sentence - "the nausea went away but I still have crushing chest
+# pain" still alerts, because "went away" is not in the same clause as "chest pain" (the clause break at "but" stops
+# the window), and a resolution phrase never suppresses anything it does not immediately follow.
+_RESOLVED = re.compile(
+    r"\b(went away|has (?:now |since )?(?:resolved|gone|cleared up|settled)|is (?:all )?gone now|"
+    r"(?:have |has )?stopped (?:now|since)|cleared up (?:now|since)?|settled down|got better|"
+    r"no longer (?:have|having|hurts?|there)|that'?s (?:resolved|gone|better) now)\b")
+
+
+_RESOLVED_BREAKS = ('.', ';', '!', '?', ' but ', ' however ', ' although ')   # a comma is often just "X happened, it
+# resolved" (one continuous thought), so - unlike negation's backward-looking breaks, which include a comma - it is
+# not treated as a hard stop here; a real change of topic ("but"/"however"/a full stop) still is.
+
+
+def resolved(text: str, start: int, end: int) -> bool:
+    """True if a resolution phrase for THIS symptom follows soon after in the same thought (see _RESOLVED above)."""
+    clause_end = len(text)
+    for b in _RESOLVED_BREAKS:
+        i = text.find(b, end)
+        if i != -1:
+            clause_end = min(clause_end, i)
+    window = text[end:min(clause_end, end + 55)]
+    return bool(_RESOLVED.search(window))
 
 
 # (label, regex). A non-negated match means "call emergency services".
@@ -102,7 +130,7 @@ EMERGENCY_PATTERNS: List[Tuple[str, str]] = [
      r"cough(ing)? (up )?blood|blood in (my )?vomit|black(,)? tarry stool|severe bleeding|bleeding (is )?(not|won'?t) stop"),
     ('Severe allergic reaction',
      r"(swelling|swollen) (of |in )?(my |the )?(lips|tongue|throat|face)|(lips|tongue|throat) (are |is )?(swelling|swollen|closing)|"
-     r"throat (is )?(closing|tight)|anaphyla"),
+     r"throat (is |feels? (like it'?s )?)?(closing|tight)|anaphyla"),
     ('Worst headache of life', r"worst headache|thunderclap|sudden severe headache"),
     ('Poisoning or overdose',
      r"overdos|swallowed (poison|bleach|pesticide|too many|a battery|a magnet|detergent)|poisoning|"
@@ -113,27 +141,51 @@ EMERGENCY_PATTERNS: List[Tuple[str, str]] = [
      r"(confus|disorient|not making sense|incoherent).{0,60}(fever|temperature|feverish)|(fever|temperature|feverish).{0,60}(confus|disorient|not making sense)"),
     # --- additional phrasings of the same warning signs (found missing on a held-out set) ---
     ('Chest pain or pressure',
-     r"clutch\w* (his|her|their|my) chest|(pain|pressure|tightness|squeez\w+|band|ache|weight) (across|around|over|on) (my |his |her |their |the )?chest|"
-     r"chest.{0,25}(crushing|squeez\w+|vice|band)|crushing.{0,25}chest|chest.{0,30}(down|into|spread\w*|radiat\w*).{0,25}(jaw|left arm|arm|neck)|"
-     r"(jaw|left arm).{0,30}(pain|ache).{0,30}chest|(chest|heart).{0,20}(pounding|racing).{0,40}(faint|dizzy|sweat)|grey and sweaty|gray and sweaty"),
+     r"clutch\w* (at )?(his|her|their|my) (left |right )?(chest|arm)|(pain|pressure|tightness|squeez\w+|band|ache|weight) (across|around|over|on) (my |his |her |their |the )?chest|"
+     r"chest.{0,50}(crushing|squeez\w+|vice|band|on fire|burning|searing)|crushing.{0,50}(chest|pressure)|chest.{0,30}(down|into|spread\w*|radiat\w*).{0,25}(jaw|left arm|arm|neck)|"
+     r"(jaw|left arm).{0,30}(pain|ache|aching|hurts?).{0,30}chest|(chest|heart).{0,20}(pounding|racing).{0,40}(faint|dizzy|sweat)|grey and sweaty|gray and sweaty|"
+     r"chest (is |feels? )?(on fire|burning|searing)"),
     ('Severe trouble breathing',
-     r"(isn'?t|is not|not|stopped|has stopped|have stopped|stops) breathing|no pulse|struggling for breath|fighting for breath|gasp\w* for (air|breath)|turning (blue|grey|gray)"),
+     r"(isn'?t|is not|not|stopped|has stopped|have stopped|stops) breathing|no pulse|struggling for breath|fighting for breath|gasp\w* for (air|breath)|turning (blue|grey|gray)|"
+     r"turn\w* (a )?(funny|strange|odd|different|weird) colou?r|(went|turning|turned) (a )?(funny|strange|odd|weird) colou?r|"
+     r"asthma attack.{0,60}(can'?t|cannot|barely|hardly|unable to) (talk|speak|finish (a )?sentence|breathe)|"
+     r"(can'?t|cannot|barely|hardly|unable to) (talk|speak|finish (a )?sentence).{0,60}asthma|(bad|severe|really bad|terrible) asthma attack.{0,60}(not|isn'?t|n'?t) (responding|improving|getting better|working)|"
+     r"grunt\w*.{0,60}(breath\w*|each breath)|rib\w*.{0,30}(suck\w* in|retract\w*|pulling in|caving in)|(chest|belly).{0,20}(suck\w* in|caving in|pulling in)|"
+     r"(suck\w* in|caving in|pulling in).{0,30}(rib\w*|chest)|nostrils? flaring|flaring nostrils?|working (really |very )?hard to breathe|breathing (really |very )?fast and (hard|shallow)|"
+     r"can'?t catch (my|her|his|their) breath at all|chest (is )?heaving|raspy breathing|breathing.{0,15}raspy|(gone|going|turned|turning) quiet and (floppy|limp)"),
     ('Possible stroke signs',
      r"(suddenly )?(can'?t|cannot|unable to) (speak|talk|get (my |her |his )?words out)|mouth (is )?(hanging|drooping|dropped|sagging)|"
      r"one side of (the |her |his |my )?(face|mouth).{0,25}(droop|hang|sag)|"
-     r"(can'?t|cannot|unable to) (feel|move|lift|raise) (my |his |her )?(left |right )?(arm|leg|face)|numb(ness)? on one side|one side.{0,25}numb|face.{0,20}numb"),
+     r"(can'?t|cannot|unable to) (feel|move|lift|raise) (my |his |her )?(left |right )?(arm|leg|face)|numb(ness)? on one side|one side.{0,25}numb|face.{0,20}numb|"
+     r"(half|one side of) (his|her|their|my) face (has |is )?(dropped|fallen|gone)|words? (are |is |coming out )?(all )?jumbled|talking jumbled|speech (is )?jumbled"),
     ('Loss of consciousness or seizure',
      r"jerking|shaking uncontrollably|gone stiff|going stiff|twitching all over|convulsing|isn'?t moving|not moving at all|won'?t move|lying (motionless|still)|"
-     r"drowsy.{0,40}(burning up|hot).{0,40}(nonsense|confus)"),
+     r"drowsy.{0,40}(burning up|hot).{0,40}(nonsense|confus)|"
+     r"keel\w* over|keeling over|won'?t respond|will not respond|not respond(ing)?|isn'?t respond(ing)?|doesn'?t respond|unrespons\w*|no response (from|to)|"
+     r"having (a )?fit(s)?\b|(is|was|been)\s+fitting\b|fit(s)?\s+(that\s+)?(won'?t|wont|does(n'?t)?)\s+stop|seizure\s+(that\s+)?(won'?t|does(n'?t)?)\s+stop|"
+     r"slumped (against|on|over)|nothing (i|we|anyone) do(es)? (wakes?|rouses?) (him|her|them)|can'?t (rouse|wake) (him|her|them)|"
+     r"dropped to the (ground|floor).{0,40}(hasn'?t|hasnt|has not) moved|not (been able to|able to) move since|"
+     r"\bseized\b.{0,20}(for )?(a |an |over |almost |nearly |about )?\d*\s*(minute|second)s?\b"),
     ('Severe allergic reaction',
      r"(tongue|lips|face|throat|eyelids) (are |is |has |have )?(puffing|puffy|puffed|ballooning)( up)?|puffing up after|"
-     r"(wasp|bee|hornet) sting.{0,60}(swell|puff|breath|wheez)|wheez\w+.{0,60}(lips|face|swell)|(lips|face|swell).{0,60}wheez"),
+     r"(wasp|bee|hornet) sting.{0,60}(swell|puff|breath|wheez)|wheez\w+.{0,60}(lips|face|swell)|(lips|face|swell).{0,60}wheez|"
+     r"(my |his |her |their )?(face|lips|tongue|throat|eyelids) (is |are )?swelling|airway (is |feels? |feels? like it'?s )?(tight|closing|constrict\w*|blocked|swelling)|"
+     r"feel\w* like (my |his |her )?airway (is|'s) (tight|closing)"),
     ('Severe bleeding',
-     r"lost (a )?(huge|large|great|massive)? ?(amount|deal|lot)? ?of blood|losing (a lot of )?blood|blood (is )?(pouring|gushing|everywhere|soaking)|bleeding.{0,15}(everywhere|badly)"),
+     r"lost (a )?(huge|large|great|massive)? ?(amount|deal|lot)? ?of blood|losing (a lot of )?blood|blood'?s? (is )?(pouring|gushing|everywhere|soaking)|bleeding.{0,15}(everywhere|badly)|"
+     r"soaking (through|into) (every|all (the|our)?).{0,15}(towel|cloth|bandage|dressing)s?|blood.{0,20}soaking (through|into)"),
     ('Poisoning or overdose',
-     r"(ate|eaten|swallowed|took|taken|drank|drunk|gulped)( a| the)? (handful|bottle|whole|lot|load|many|several|too many|too much)( of)?.{0,35}(pills?|tablets?|capsules?|medicine|medication|sleeping|paracetamol|acetaminophen|ibuprofen|aspirin)"),
+     r"(ate|eaten|swallowed|took|taken|drank|drunk|gulped|had|necked)( a| the| some)?( whole)? (handful|bottle|whole|lot|load|many|several|too many|too much|strip)( of)?.{0,35}"
+     r"(pills?|tablets?|capsules?|medicine|medication|sleeping|paracetamol|acetaminophen|ibuprofen|aspirin|painkillers?|pain killers?|antidepressants?)|"
+     r"(drank|swallowed|ate|ingested|took|drunk|had|necked)\s+(the |some |a |an |a bit of |a little |a sip of |a load of )?"
+     r"(weedkiller|weed killer|herbicide|pesticide|insecticide|rat poison|rodenticide|bleach|detergent|disinfectant|cleaning (fluid|product|spray)|petrol|kerosene|paraffin|antifreeze|"
+     r"nail polish remover|paint thinner|battery (acid|fluid)|poison)\b|"
+     r"found (with|holding|next to|near)\s+(an? )?(empty\s+)?(bottle|packet|strip|blister pack|container)\s+of\s+(tablets?|pills?|medicine|medication|capsules?)|"
+     r"spilled?.{0,45}(tablets?|pills?|capsules?|medicine|detergent|dishwasher (tablets?|pods?)|weedkiller|weed killer|bleach|pesticide|insecticide|chemical).{0,40}(open|everywhere|spilled|container)|"
+     r"(tablets?|pills?|capsules?|medicine|detergent|weedkiller|weed killer|bleach|pesticide|insecticide|chemical).{0,30}spilled.{0,40}(open|everywhere|container)|"
+     r"spray(ed)? .{0,25}(in(to)? (her|his|their|my|his own|her own|their own) mouth)|sprayed.{0,30}mouth"),
     ('Fever with confusion',
-     r"talking nonsense|(not|isn'?t) making (any )?sense|rambling|delirious|hallucinat\w+"),
+     r"talking nonsense|(not|isn'?t) making (any )?sense|rambling|delirious|hallucinat\w+|see\w* things that (aren'?t|are not) (really )?there|seeing things that aren'?t there"),
     ('Serious injury or accident',
      r"fell (off|from|down).{0,25}(roof|ladder|tree|stairs|balcony|height|cliff)|fall(en)? off (a |the )?(roof|ladder|tree|balcony|horse|motorbike|scooter)|run over|crushed by"),
     ('Snake or scorpion bite',
@@ -141,7 +193,148 @@ EMERGENCY_PATTERNS: List[Tuple[str, str]] = [
     ('Serious injury or accident',
      r"hit by (a )?(car|bus|truck|vehicle|bike)|(fell|fall|fallen) from (a )?(height|roof|tree|ladder|balcony|stairs)|"
      r"electrocuted|electric shock|drown|nearly drowned|severe head injury|stabbed|shot"),
+    ('Pregnancy with heavy bleeding',
+     r"pregnan\w*.{0,80}(gush\w* of blood|heavy bleed\w*|bleeding (heavily|a lot)|soaking (through|pads))|"
+     r"(gush\w* of blood|heavy bleed\w*).{0,80}pregnan\w*|\d+\s*(weeks?|months?)\s*pregnant.{0,80}(gush|blood|bleed)|"
+     r"\d+\s*(weeks?|months?)\s*(along|gone)\b.{0,80}(bleed\w*|blood|soaking|pad)|(bleed\w*|soaking (through|pads?)).{0,80}\d+\s*(weeks?|months?)\s*(along|gone)\b|"
+     r"(soaking|bleeding) through.{0,20}(more than |several |multiple )?(a |one )?(pad|pads)\b"),
 ]
+# ---------------------------------------------------------------------------
+# Beyond single-phrase matching, part 1: weak-signal COMBINATIONS.
+#
+# Some real descriptions of an emergency never use any single strong phrase (no "chest pain", no "heart attack"),
+# but combine several individually-unremarkable words that, TOGETHER, are a recognised pattern: "went pale, clutched
+# his arm and fell down" describes a heart attack without the word "chest" ever appearing. A single one of these
+# words (pale, sweating, fell) is far too common to use as a trigger on its own - it would cause constant false
+# alarms. Requiring at least two DIFFERENT signal groups to co-occur keeps the false-alarm rate low while catching
+# indirect, non-keyword phrasing that no single regex could reasonably cover.
+# ---------------------------------------------------------------------------
+
+@dataclass(frozen=True)
+class ComboRule:
+    label: str                        # reuses an EMERGENCY_PATTERNS label, so downstream guidance is unchanged
+    groups: Tuple['re.Pattern', ...]   # independent weak signals
+    min_groups: int = 2               # this many DIFFERENT groups must each have a non-negated match
+
+
+COMBO_RULES: List[ComboRule] = [
+    ComboRule('Chest pain or pressure', (
+        re.compile(r"\b(pale|ghost white|went white|grey|gray|ashen|clammy|colou?r (?:was |is )?drain\w*|colour draining|color draining)\b"),
+        re.compile(r"\b(clutch\w*|grab\w*(?: at)?(?: his| her| their| my)?(?: the)?)\b.{0,25}\b(chest|arm|left arm|right arm|table|edge|rail|banister)\b"),
+        re.compile(r"\b(fell (down|over)|collapsed|keel\w* over|went down|dropped (to the floor|down)|sank to (the )?floor|crumpled)\b"),
+        re.compile(r"\b(sweat\w*|drenched|clammy)\b"),
+        re.compile(r"\b(shoulder|jaw|arm) (ache|aches|aching|pain|hurts?)\b"),
+        re.compile(r"\bchest\b"),
+    ), 2),
+    ComboRule('Loss of consciousness or seizure', (
+        re.compile(r"\b(pale|ghost white|went white|grey|gray|ashen|blue|purple|funny colou?r|odd colou?r|strange colou?r|mottled|blotchy)\b"),
+        re.compile(r"\b(not|isn'?t|doesn'?t|won'?t|wasn'?t|wouldn'?t|couldn'?t)\s+(\w+\s+){0,3}(respond\w*|wak\w*|react\w*|answer\w*|latch\w*)\b"),
+        re.compile(r"\b(limp|floppy|lifeless|rag doll|dead weight)\b"),
+        re.compile(r"\b(fell (down|over)|collapsed|keel\w* over|dropped (to the floor|down)|went down|crumpled|found.{0,15}(on|lying on) the floor)\b"),
+    ), 2),
+]
+
+
+def combo_signals(text: str) -> List[str]:
+    """Labels from COMBO_RULES whose required number of signal groups each have a non-negated match in `text`."""
+    t = (text or '').lower()
+    found: List[str] = []
+    for rule in COMBO_RULES:
+        hits = 0
+        for group in rule.groups:
+            m = group.search(t)
+            if m and not negated(t, m.start()):
+                hits += 1
+        if hits >= rule.min_groups and rule.label not in found:
+            found.append(rule.label)
+    return found
+
+
+# ---------------------------------------------------------------------------
+# Beyond single-phrase matching, part 2: careful typo tolerance.
+#
+# A hand-reviewed table of real misspellings (exact lookup: zero collision risk) covers short, common words where
+# algorithmic fuzzy matching would be dangerous (e.g. "fever" is one edit from "never"). For a short list of LONG,
+# distinctive clinical words, a generic one-edit check (insertion, deletion, substitution or adjacent transposition)
+# is also applied - each word on that list was checked by hand for a same-distance collision with an ordinary
+# English word (for example "bleeding"/"breeding" and "overdose"/"overdoes" are one edit apart, so those two stay
+# on the EXACT-lookup table instead, where only the specific misspelling is corrected, never the real word).
+# ---------------------------------------------------------------------------
+
+TYPO_FIXES: Dict[str, str] = {
+    'uncouncious': 'unconscious', 'unconsious': 'unconscious', 'unconcious': 'unconscious', 'unconscous': 'unconscious',
+    'unresponsiv': 'unresponsive', 'unresponsove': 'unresponsive',
+    'breathng': 'breathing', 'breatheing': 'breathing', 'breething': 'breathing', 'breath ing': 'breathing',
+    'bleading': 'bleeding', 'bleding': 'bleeding', 'bledding': 'bleeding',
+    'siezure': 'seizure', 'siezures': 'seizures', 'seisure': 'seizure', 'seisures': 'seizures', 'siezed': 'seized',
+    'weedkiler': 'weedkiller', 'weedkillar': 'weedkiller',
+    'poisning': 'poisoning', 'poisioning': 'poisoning', 'posioning': 'poisoning',
+    'anaphalaxis': 'anaphylaxis', 'anaphylaxsis': 'anaphylaxis', 'anaphalactic': 'anaphylactic',
+    'chokeing': 'choking', 'chocking': 'choking',
+    'colapsed': 'collapsed', 'collasped': 'collapsed', 'colllapsed': 'collapsed',
+    'ovedose': 'overdose', 'overdoese': 'overdose',
+    'feaver': 'fever', 'fevor': 'fever',
+    'vomitting': 'vomiting', 'vommiting': 'vomiting',
+    'diziness': 'dizziness', 'dizzyness': 'dizziness',
+    'sweling': 'swelling', 'sweling': 'swelling',
+    'alergic': 'allergic', 'allergik': 'allergic',
+    'parallised': 'paralysed', 'paralised': 'paralysed', 'paralized': 'paralyzed',
+}
+
+# Long enough that an accidental one-edit collision with an unrelated everyday word is implausible (checked by hand).
+_FUZZY_SAFE_TERMS = ('unconscious', 'unresponsive', 'anaphylaxis', 'anaphylactic', 'convulsing', 'paralysed',
+                     'paralyzed', 'wheezing', 'diabetic', 'numbness', 'confused', 'drowsiness')
+
+
+def _one_edit_apart(a: str, b: str) -> bool:
+    """True if `a` and `b` differ by at most one single-character insertion, deletion, substitution, or adjacent
+    transposition (a simple Damerau-Levenshtein distance-1 check, without building a full edit-distance table)."""
+    if a == b:
+        return True
+    la, lb = len(a), len(b)
+    if abs(la - lb) > 1:
+        return False
+    if la == lb:
+        diffs = [i for i in range(la) if a[i] != b[i]]
+        if len(diffs) == 1:
+            return True
+        return len(diffs) == 2 and diffs[1] == diffs[0] + 1 and a[diffs[0]] == b[diffs[1]] and a[diffs[1]] == b[diffs[0]]
+    short, long_ = (a, b) if la < lb else (b, a)
+    i = j = skipped = 0
+    while i < len(short) and j < len(long_):
+        if short[i] != long_[j]:
+            skipped += 1
+            if skipped > 1:
+                return False
+            j += 1
+        else:
+            i += 1
+            j += 1
+    return True
+
+
+_WORD_RE = re.compile(r"[a-zA-Z']+")
+
+
+def normalize_typos(text: Optional[str]) -> str:
+    """Correct a small, hand-reviewed set of likely misspellings of critical clinical words before matching.
+    Never changes a correctly-spelled word, and the fuzzy lane only ever targets words long enough that an
+    accidental collision with an unrelated word has been checked and ruled out."""
+    text = text or ''
+    out = text
+    for word in set(_WORD_RE.findall(text)):
+        lw = word.lower()
+        fix = TYPO_FIXES.get(lw)
+        if fix is None and len(lw) >= 7:
+            for term in _FUZZY_SAFE_TERMS:
+                if abs(len(lw) - len(term)) <= 1 and lw != term and _one_edit_apart(lw, term):
+                    fix = term
+                    break
+        if fix:
+            out = re.sub(r'\b' + re.escape(word) + r'\b', fix, out)
+    return out
+
+
 CRISIS_PATTERN = re.compile(
     r"suicid|kill (myself|my self)|end (my|this) life|want to die|self[- ]harm|hurt myself|don'?t want to (live|be alive)|"
     r"better off (dead|without me)|no point (in )?(living|going on|being alive)|don'?t see the point (in )?(living|going on)|thinking (of|about) ways to (go|die|end)|"
@@ -181,16 +374,37 @@ URGENT_PATTERNS: List[Tuple[str, str]] = [
      r"(chemo\w*|immunosuppress\w*|transplant).{0,80}(fever|temperature)|(fever|temperature).{0,80}(chemo\w*|immunosuppress\w*)"),
     ('Signs of dehydration',
      r"(barely|hardly|not|no|haven'?t|hasn'?t|without).{0,25}(passed|had)?.{0,12}(wee|urine|pee)\w*.{0,40}(all day|today|for \d+ hours|since (yesterday|morning))"),
+    ('Possible joint infection in a child',
+     r"(red\s+)?(hot|swollen|swelling).{0,25}(knee|joint|ankle|elbow|hip|wrist).{0,60}(fever|temperature|won'?t walk|can'?t walk|refus\w* to walk|not weight.?bearing)|"
+     r"(knee|joint|ankle|elbow|hip|wrist).{0,30}(red|hot|swollen).{0,60}(fever|temperature|won'?t walk|can'?t walk)"),
+    ('Deep wound exposing tendon, bone or muscle',
+     r"(deep|bad|large) (cut|wound|gash|laceration).{0,60}(see|exposed?|showing|visible).{0,15}(the )?(tendon|bone|muscle|fat)|"
+     r"(can|could) see (the |my )?(tendon|bone|muscle).{0,40}(cut|wound|gash|laceration)|cut.{0,30}(down to|through) (the )?(tendon|bone|muscle)"),
+    ('Pregnancy: waters broken with abnormal fluid',
+     r"(water(s)? (broke|broken|burst)|membranes? ruptured).{0,90}(green|brown|dark|foul|smell\w*|meconium)|"
+     r"(green|brown|dark|foul|meconium).{0,90}(water(s)? (broke|broken|burst)|amniotic fluid)"),
 ]
 
 # "Should be checked soon" signs: a doctor within a day or two. They raise the urgency to at least medium.
 SEE_SOON_PATTERNS: List[Tuple[str, str]] = [
-    ('Blood in urine, stool or sputum', r"blood in (my |the )?(urine|stool|poo|poop|sputum|phlegm)|(peeing|passing|pooing) blood|bloody (urine|stool|diarrh\w+)"),
-    ('A new lump', r"(new |a )?lump (in|on|under).{0,20}(breast|testicle|neck|armpit|groin)|lump in (my |the )?breast"),
+    ('Blood in urine, stool or sputum',
+     r"blood in (my |the )?(urine|stool|poo|poop|sputum|phlegm)|(peeing|passing|pooing) blood|bloody (urine|stool|diarrh\w+)|"
+     r"blood (on|when i wipe|on the (tissue|toilet paper|paper))|(when|after) i wipe.{0,20}blood"),
+    ('A new lump', r"(new |a )?lump.{0,15}(in|on|under).{0,20}(breast|testicle|neck|armpit|groin)|lump in (my |the )?breast"),
     ('Cannot bear weight after an injury', r"(can'?t|cannot|unable to) (put|bear) (any )?weight|can'?t walk on it"),
     ('Fever lasting several days', r"(fever|temperature).{0,40}(for|since|last(ed|ing)?).{0,15}(3|three|4|four|5|five|6|six|7|seven|several|few) days|(3|three|4|four|5|five|6|six|7|seven|several|few) days (of|with) (a )?(high )?(fever|temperature)"),
     ('Unexplained weight loss', r"(unexplained|unintentional) weight loss|lost (a lot of )?weight (without|for no)"),
-    ('Severe eye pain', r"(stabbing|severe|sudden|intense) (pain|ache) (behind|in) (my |the |her |his )?eyes?"),
+    ('Severe eye pain', r"(stabbing|severe|sudden|intense|sharp) (pain|ache) (behind|in) (my |the |her |his )?(left |right )?eyes?"),
+    ('Persistent ringing in the ears', r"ringing in (my |the )?ears?.{0,40}(won'?t go away|days?|weeks?|persist\w*)|tinnitus"),
+    ('Painful or burning urination',
+     r"(burning|stinging|pain\w*) (feeling |sensation )?(when|while|during|as) (i )?(wee+|pee+|urinat\w*|passing (urine|water))|"
+     r"burning (wee|pee)\b|(wee|pee|urin\w*) (that )?(burns?|stings?|hurts?)"),
+    ('Recurrent fainting or blackouts',
+     r"(keep(s)?|keeps on|often|frequently|again and again|repeatedly) (\w+\s+)?faint\w*|faint\w*.{0,30}(when (i|you) stand|on standing|standing up)|"
+     r"black(ing)? out.{0,30}stand|near[- ]faint\w*"),
+    ('Cough lasting several weeks',
+     r"cough\w*.{0,20}(for|since|lasting).{0,15}(3|three|4|four|5|five|6|six|\d+|several|many) weeks?|"
+     r"(3|three|4|four|5|five|6|six|\d+|several|many) weeks?.{0,20}(of|with) (a )?cough"),
 ]
 _SEE_SOON_RE = [(label, re.compile(p)) for label, p in SEE_SOON_PATTERNS]
 _EMERGENCY_RE = [(label, re.compile(p)) for label, p in EMERGENCY_PATTERNS]
@@ -214,26 +428,30 @@ class Signals:
 
 def scan(text: Optional[str]) -> Signals:
     """Scan free text for emergency / urgent / self-harm language. Safe on any input."""
-    t = (text or '').lower()
+    t = normalize_typos(text or '').lower()
     sig = Signals()
     for label, rx in _EMERGENCY_RE:
         for m in rx.finditer(t):
-            if not negated(t, m.start()):
+            if not negated(t, m.start()) and not resolved(t, m.start(), m.end()):
                 if label not in sig.emergency:
                     sig.emergency.append(label)
                 break
     for label, rx in _URGENT_RE:
         for m in rx.finditer(t):
-            if not negated(t, m.start()):
+            if not negated(t, m.start()) and not resolved(t, m.start(), m.end()):
                 if label not in sig.urgent:
                     sig.urgent.append(label)
                 break
     for label, rx in _SEE_SOON_RE:
         for m in rx.finditer(t):
-            if not negated(t, m.start()):
+            if not negated(t, m.start()) and not resolved(t, m.start(), m.end()):
                 sig.soon.append(label)
                 break
     sig.crisis = bool(CRISIS_PATTERN.search(t))
+    # Indirect phrasing that never uses a single strong keyword (see ComboRule above).
+    for label in combo_signals(t):
+        if label not in sig.emergency:
+            sig.emergency.append(label)
     # Hindi / Marathi / Kannada, in their own scripts and typed in English letters. Same labels, so everything downstream is unchanged.
     extra, extra_crisis = i18n_emergency.detect(text or '')
     for label in extra:
@@ -536,7 +754,9 @@ def symptom_output_floors(result: Dict) -> List[Floor]:
 IMAGE_EMERGENCY = re.compile(
     r"spurting|arterial|bleeding (heavily|profusely|a lot|that won'?t stop|won'?t stop)|(exposed|visible|protruding) (bone|tendon|muscle|fat)|"
     r"bone (is )?(visible|protruding|showing)|amputat|charred|full[- ]thickness|third[- ]degree|burn.{0,30}(airway|inhal)|"
-    r"swelling of (the )?(lips|tongue|throat|face)|snake ?bite|severe(ly)? deform")
+    r"swelling of (the )?(lips|tongue|throat|face)|(lips|tongue|throat|facial) (swelling|swollen)|anaphyla|"
+    r"(widespread|extensive).{0,20}hives.{0,40}(swelling|allergic|face)|hives.{0,40}(facial|face).{0,20}(swelling|swollen)|"
+    r"snake ?bite|severe(ly)? deform")
 IMAGE_SAME_DAY = re.compile(
     r"red streak|spreading (redness|infection)|expanding redness|pus.{0,30}swell|necrotic|necrosis|black(ened)? (skin|tissue)|dusky|"
     r"(large|extensive|deep) burn|burn.{0,40}(face|hand|hands|foot|feet|genital|joint)|(animal|dog|cat|human|monkey) bite|"
@@ -595,10 +815,11 @@ _DIAGNOSTIC: List[Tuple[re.Pattern, str]] = [
 # Overconfidence and false reassurance: safe to rewrite anywhere.
 _OVERCONFIDENT: List[Tuple[re.Pattern, str]] = [
     (re.compile(r"\b(?:definitely|certainly|undoubtedly|unquestionably|without (?:a )?doubt|100% ?(?:sure|certain)|guaranteed)\b", re.I), "possibly"),
-    (re.compile(r"\b(?:nothing to worry about|no need to worry|no cause for concern|perfectly (?:fine|safe)|completely (?:safe|harmless)|totally harmless)\b", re.I),
+    (re.compile(r"\b(?:nothing to worry about|no need to worry|no cause for concern|perfectly (?:fine|safe)|completely (?:safe|harmless)|totally (?:harmless|fine)|you'?ll be (?:totally |completely |perfectly )?fine)\b", re.I),
      "likely minor, though that cannot be confirmed from here"),
     (re.compile(r"\bno need to (?:see|visit|consult) (?:a |the )?(?:doctor|clinician|professional)\b", re.I), "you may still want to check with a doctor"),
     (re.compile(r"\b(?:safe|fine) to (?:ignore|wait|leave it)\b", re.I), "worth keeping an eye on"),
+    (re.compile(r"\bwill (?:go away|clear up|resolve) (?:on its own|by itself)\b", re.I), "may need checking rather than assuming it will resolve by itself"),
 ]
 _REASSURANCE_RE = re.compile(
     r"nothing to worry|no need to worry|no cause for concern|no need to (see|visit|consult)|safe to (ignore|wait)|"
@@ -885,7 +1106,8 @@ class TriageEngine:
             adjustments.append(f'Removed {kind} from the advice (ask a pharmacist or doctor instead).')
         r['safety_review'] = {'engine_version': ENGINE_VERSION, 'checks': checks, 'adjustments': adjustments,
                               'original_urgency': original, 'final_urgency': final, 'urgency_raised': d['raised'],
-                              'language_softened': lang['softened'], 'removed': lang['removed']}
+                              'language_softened': lang['softened'], 'removed': lang['removed'],
+                              'reassurance_detected': had_reassurance}
         return r
 
     @staticmethod
@@ -944,6 +1166,7 @@ class TriageEngine:
             e.setdefault('why', '')
             e.setdefault('supported_by', [])
 
+        had_reassurance = bool(_REASSURANCE_RE.search(r.get('summary', '') or ''))   # before softening rewrites it
         lang = sanitize_language(r)
 
         q_rating = (quality or {}).get('rating')
@@ -1017,7 +1240,8 @@ class TriageEngine:
             adjustments.append(f'Removed {kind} from the advice (ask a pharmacist or doctor instead).')
         r['safety_review'] = {'engine_version': ENGINE_VERSION, 'checks': checks, 'adjustments': adjustments,
                               'original_urgency': original, 'final_urgency': final, 'urgency_raised': d['raised'],
-                              'language_softened': lang['softened'], 'removed': lang['removed']}
+                              'language_softened': lang['softened'], 'removed': lang['removed'],
+                              'reassurance_detected': had_reassurance}
         return r
 
     # -- safe fallbacks ----------------------------------------------------

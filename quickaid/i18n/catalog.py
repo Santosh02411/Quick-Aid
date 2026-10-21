@@ -33,7 +33,7 @@ S('nav.symptoms', 'Symptoms', 'लक्षण', 'लक्षणे', 'ಲಕ�
 S('nav.ask_short', 'Ask', 'पूछें', 'विचारा', 'ಕೇಳಿ')
 S('nav.sos', 'SOS', 'एसओएस', 'एसओएस', 'ಎಸ್‌ಒಎಸ್')
 S('a11y.skip', 'Skip to content', 'मुख्य सामग्री पर जाएं', 'मुख्य मजकुराकडे जा', 'ಮುಖ್ಯ ವಿಷಯಕ್ಕೆ ಹೋಗಿ')
-S('a11y.table', 'Scrollable table', 'स्क्रॉल होने वाली तालिका', 'स्क्रोल करता येणारा तक्ता', 'ಸ್ಕ್ರಾಲ್ ಮಾಡಬಹುದಾದ ಕೋಷ್ಟಕ')
+S('a11y.table', 'Scrollable table', 'स्क्रॉल होने वाली तालिका', 'स्क्रोल करता येणारा तक्ता', 'ಸ್ಕ್ರೋಲ್ ಮಾಡಬಹುದಾದ ಕೋಷ್ಟಕ')
 S('lang.label', 'Language', 'भाषा', 'भाषा', 'ಭಾಷೆ')
 S('lang.notice', 'Translations of safety and medical text have not been checked by clinicians yet and may contain mistakes. In an emergency call {number}.',
   'सुरक्षा और चिकित्सा संबंधी पाठ के अनुवाद की अभी चिकित्सकों ने जांच नहीं की है, इसमें गलतियां हो सकती हैं। आपातकाल में {number} पर कॉल करें।',

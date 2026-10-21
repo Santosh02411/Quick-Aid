@@ -183,10 +183,15 @@ def normalize(text: str) -> str:
 # (label, regex) written for text that has been through normalize(). Hindi and Marathi share the Devanagari script, so some wording overlaps.
 _RAW: List[Tuple[str, str]] = [
     # ---------------- Devanagari: Hindi ----------------
-    ('Chest pain or pressure', r'(सीने|छाती)\s*(में|पर|मे)\s*(तेज\s*|बहुत\s*)?(दर्द|जकड़न|जकडन|दबाव|भारीपन|भारी\s*पन|घुटन|कसाव)|सीने\s*(पर|में)\s*(बहुत\s*)?(बोझ|वजन)|दिल\s*का\s*दौरा|हार्ट\s*अटैक|हार्टअटैक|छाती\s*(दर्द|जकड़)|सीने\s*का\s*दर्द|सीना\s*(दर्द|जकड़|भारी)'),
-    ('Severe trouble breathing', r'(सांस|श्वास)\s*(लेने\s*में\s*)?(बहुत\s*|काफी\s*|ज्यादा\s*|गंभीर\s*)?(तकलीफ|तकलिफ|दिक्कत|परेशानी|कठिनाई)|सांस\s*(नहीं|नही)\s*(आ|ले)|सांस\s*(फूल|रुक|अटक|बंद)|दम\s*(घुट|फूल)|सांस\s*लेना\s*(मुश्किल|कठिन)|होंठ\s*(नीले|नीला)'),
+    # The intensifier group before the symptom word is REPEATABLE (zero or more, any order) so both an amplifier
+    # ("बहुत तेज़ दर्द" = very sharp pain) and a minimiser ("थोड़ा सा भारीपन" = a little heaviness, a classic way
+    # people understate a real cardiac symptom) still reach the symptom word itself.
+    ('Chest pain or pressure', r'(सीने|छाती)\s*(में|पर|मे)\s*(?:तेज\s*|बहुत\s*|थोड़ा\s*|थोडा\s*|जरा\s*|हल्का\s*|कुछ\s*|सा\s*)*(दर्द|जकड़न|जकडन|दबाव|भारीपन|भारी\s*पन|घुटन|कसाव)|सीने\s*(पर|में)\s*(बहुत\s*)?(बोझ|वजन)|दिल\s*का\s*दौरा|हार्ट\s*अटैक|हार्टअटैक|छाती\s*(दर्द|जकड़)|सीने\s*का\s*दर्द|सीना\s*(दर्द|जकड़|भारी)|'
+     r'(छाती|सीना|सीने)\s*फट(ने)?\s*(रही|रहा|वाल[ाी])'),
+    ('Severe trouble breathing', r'(सांस|श्वास)\s*(लेने\s*में\s*)?(बहुत\s*|काफी\s*|ज्यादा\s*|गंभीर\s*)?(तकलीफ|तकलिफ|दिक्कत|परेशानी|कठिनाई)|सांस\s*(नहीं|नही)\s*(आ|ले)|सांस\s*(फूल|रुक|अटक|बंद|उखड़)|दम\s*(घुट|फूल)|सांस\s*लेना\s*(मुश्किल|कठिन)|होंठ\s*(नीले|नीला)'),
     ('Possible stroke signs', r'(चेहरा|मुंह|मुँह|मुह)\s*(टेढ़ा|टेड़ा|टेढा|लटक)|बोलने\s*में\s*(दिक्कत|परेशानी|तकलीफ|कठिनाई)|जुबान\s*(लड़खड़|लडखड)|लकवा|पक्षाघात|स्ट्रोक|पैरालिसिस|आधा\s*शरीर.{0,15}(सुन्न|कमजोर|काम\s*नहीं)|एक\s*(तरफ|ओर|हिस्से).{0,25}(कमजोर|कमज़ोर|सुन्न|लकवा)'),
-    ('Loss of consciousness or seizure', r'बेहोश|होश\s*(में\s*)?(नहीं|नही|खो)|दौरा\s*(पड़|पड|आ)|मिर्गी|झटके\s*(आ|लग)|जवाब\s*(नहीं|नही)\s*(दे|दिया)|उठ\s*नहीं\s*(रहा|रही|पा)'),
+    ('Loss of consciousness or seizure', r'बेहोश|होश\s*(में\s*)?(नहीं|नही|खो)|दौरा\s*(पड़|पड|आ)|मिर्गी|झटके\s*(आ|लग)|जवाब\s*(नहीं|नही)\s*(दे|दिया)|उठ\s*नहीं\s*(रहा|रही|पा)|'
+     r'आंखों?\s*के\s*आगे\s*अंधेरा\s*छा|अंधेरा\s*छा\s*गया'),
     ('Severe bleeding', r'(बहुत|काफी|ज्यादा|तेज)\s*(खून|रक्त)|खून\s*(बह|निकल|नहीं\s*रुक|रुक\s*नहीं)|रक्तस्राव|खून\s*की\s*उल्टी|खूनी\s*उल्टी|उल्टी\s*में\s*खून|खून\s*की\s*खांसी|खांसी\s*में\s*खून|काला\s*मल'),
     ('Severe allergic reaction', r'(होंठ|जीभ|गला|गले|चेहरा|चेहरे)\s*(पर|में)?\s*(सूज|फूल)|सूजन.{0,15}(होंठ|जीभ|गला|गले|चेहरे)|गला\s*(बंद|घुट|टाइट)|एलर्जी.{0,30}(सांस|सूज)'),
     ('Worst headache of life', r'(सबसे|बहुत)\s*(भयानक|तेज|ज्यादा).{0,12}सिर\s*दर्द|अचानक\s*(तेज|भयानक).{0,12}सिर\s*दर्द|सिरदर्द.{0,15}सबसे\s*(तेज|भयानक|बुरा)|जीवन\s*का\s*सबसे\s*(तेज|बुरा).{0,10}(सिर|दर्द)'),
@@ -197,24 +202,28 @@ _RAW: List[Tuple[str, str]] = [
     ('Serious injury or accident', r'(छत|ऊंचाई|पेड़|सीढ़ी|सीढ़ियों|बालकनी)\s*से\s*गिर|हादसा|दुर्घटना|एक्सीडेंट|करंट\s*(लग|का\s*झटका)|बिजली\s*का\s*झटका|डूब|गोली\s*लग|चाकू\s*लग|सिर\s*में\s*गंभीर\s*चोट'),
     ('Thoughts of self-harm', r'आत्महत्या|खुदकुशी|जान\s*दे\s*(दूं|देना)|मरना\s*चाह|मर\s*जाना\s*चाह|जीना\s*नहीं\s*चाह|जीने\s*की\s*इच्छा\s*नहीं|खुद\s*को\s*(खत्म|मार|नुकसान|चोट)|अपनी\s*जान\s*(ले|दे)'),
     # ---------------- Devanagari: Marathi ----------------
-    ('Chest pain or pressure', r'(छातीत|छाती)\s*(खूप\s*)?(दुखत|दुखणे|दुखतंय|दुखतय|दुखायला|वेदना|दाब|जडपणा|आवळ|जळजळ|कळ)|छातीवर\s*(दाब|ओझे|जडपणा)|हृदयविकाराचा\s*झटका|हार्ट\s*अटॅक'),
+    ('Chest pain or pressure', r'(छातीत|छाती)\s*(खूप\s*)?(दुखत|दुखणे|दुखतंय|दुखतय|दुखायला|वेदना|दाब|जडपणा|आवळ|जळजळ|कळ)|छातीवर\s*(दाब|ओझे|जडपणा)|हृदयविकाराचा\s*झटका|हार्ट\s*अटॅक|'
+     r'छाती\s*फुट(ल्या)?\s*(सारखी|सारखे)'),
     ('Severe trouble breathing', r'(श्वास|दम)\s*(घेण्यास|घ्यायला|घेताना)?\s*(खूप\s*|जास्त\s*|गंभीर\s*)?(त्रास|अडचण|कठीण|अवघड)|(श्वास|दम)\s*(घेता\s*येत\s*नाही|लागत|कोंड|अडक|थांब)|धाप\s*लागत|ओठ\s*निळे'),
     ('Possible stroke signs', r'चेहरा\s*(वाकडा|एका\s*बाजूला\s*झुक)|तोंड\s*वाकडे|बोलताना\s*(अडखळ|त्रास|अडचण)|बोलता\s*येत\s*नाही|अर्धांगवायू|एका\s*बाजूला.{0,20}(कमजोर|अशक्त|बधिर|सुन्न)'),
-    ('Loss of consciousness or seizure', r'बेशुद्ध|शुद्ध\s*(हरपल|नाही)|भोवळ|फिट\s*(आली|येत)|झटके\s*(येत|आले)|आकडी|प्रतिसाद\s*देत\s*नाही|उठत\s*नाही'),
+    ('Loss of consciousness or seizure', r'बेशुद्ध|शुद्ध\s*(हरपल|नाही)|भोवळ|फिट\s*(आली|येत)|झटके\s*(येत|आले)|आकडी|प्रतिसाद\s*देत\s*नाही|उठत\s*नाही|'
+     r'डोळ्यासमोर\s*अंधार[ीि]\s*आली'),
     ('Severe bleeding', r'(खूप|जास्त|भरपूर)\s*(रक्त|रक्तस्त्राव)|रक्तस्त्राव|रक्त\s*(वाहत|थांबत\s*नाही|येत)|रक्ताची\s*उलटी|उलटीत\s*रक्त|खोकल्यातून\s*रक्त|काळी\s*शौच'),
     ('Severe allergic reaction', r'(ओठ|जीभ|घसा|चेहरा)\s*(सुजल|सुजत|सूज)|सूज.{0,15}(ओठ|जीभ|घसा)|घसा\s*(बंद|आवळ)'),
     ('Worst headache of life', r'(सर्वात|खूप)\s*(तीव्र|भयानक).{0,12}डोकेदुखी|अचानक\s*(तीव्र|जोरात).{0,12}डोकेदुखी|आयुष्यातील\s*सर्वात.{0,10}डोकेदुखी'),
     ('Poisoning or overdose', r'विष\s*(प्यायल|खाल्ल|घेतल)|विषबाधा|ओव्हरडोस|जास्त\s*गोळ्या\s*(खाल्ल|घेतल)|फिनाईल\s*प्यायल|रॉकेल\s*प्यायल'),
     ('Stiff neck with fever', r'मान\s*(अवघडल|अवघड|कडक|ताठ).{0,40}ताप|ताप.{0,40}मान\s*(अवघडल|अवघड|कडक|ताठ)'),
     ('Fever with confusion', r'ताप.{0,40}(गोंधळ|बडबड|भ्रम|शुद्ध\s*नाही)|(गोंधळ|बडबड|भ्रम).{0,40}ताप'),
-    ('Snake or scorpion bite', r'साप\s*(चावल|डसल)|सर्पदंश|विंचू\s*(चावल|डंख|डसल)|नाग\s*चावल'),
+    ('Snake or scorpion bite', r'साप\s*(चावल|डसल)|सर्पदंश|विंचू\s*(चावल|डंख|डसल)|नाग\s*चावल|विंचवाने\s*नांगी\s*मारली|नांगी\s*मारली'),
     ('Serious injury or accident', r'(छप्पर|छत|उंची|झाड|जिना|गॅलरी)\s*(वरून|वरुन)\s*पडल|अपघात|विजेचा\s*(धक्का|झटका)|करंट\s*(लागल|बसल)|बुडत|बुडाल|गोळी\s*लागल|चाकू\s*(लागल|मारल)|डोक्याला\s*गंभीर\s*(मार|इजा)'),
     ('Thoughts of self-harm', r'आत्महत्या|जीव\s*द्याव|मरावेसे\s*वाट|मरायचे\s*आहे|जगावेसे\s*वाटत\s*नाही|स्वतःला\s*(संपव|इजा|मार)'),
     # ---------------- Kannada ----------------
-    ('Chest pain or pressure', r'ಎದೆ\s*(ಯಲ್ಲಿ|ಯಲ್ಲಿಯ|ಯ)?\s*(ತೀವ್ರ\s*)?(ನೋವು|ಬಿಗಿ|ಒತ್ತಡ|ಭಾರ|ಉರಿ)|ಹೃದಯಾಘಾತ|ಹಾರ್ಟ್\s*ಅಟ್ಯಾಕ್'),
+    ('Chest pain or pressure', r'ಎದೆ\s*(ಯಲ್ಲಿ|ಯಲ್ಲಿಯ|ಯ)?\s*(ತೀವ್ರ\s*)?(ನೋವು|ಬಿಗಿ|ಒತ್ತಡ|ಭಾರ|ಉರಿ)|ಹೃದಯಾಘಾತ|ಹಾರ್ಟ್\s*ಅಟ್ಯಾಕ್|'
+     r'ಎದೆ\s*ಒಡೆದ\s*ಹಾಗೆ'),
     ('Severe trouble breathing', r'ಉಸಿರಾಟ\s*(ದ\s*)?(ತೊಂದರೆ|ಕಷ್ಟ|ಸಮಸ್ಯೆ)|ಉಸಿರು\s*(ಕಟ್ಟ|ನಿಂತ|ತೆಗೆದುಕೊಳ್ಳಲು\s*ಆಗ)|ಉಸಿರಾಡಲು\s*(ಆಗುತ್ತಿಲ್ಲ|ಕಷ್ಟ|ತೊಂದರೆ|ಆಗದ)|ತುಟಿ(ಗಳು)?\s*ನೀಲಿ'),
     ('Possible stroke signs', r'ಮುಖ\s*(ಓರೆ|ವಾಲ|ಜೋಲು|ಕೊಂಕು)|ಮಾತನಾಡಲು\s*(ಕಷ್ಟ|ಆಗ|ತೊಂದರೆ)|ಮಾತು\s*(ತೊದಲ|ಬರ)|ಪಾರ್ಶ್ವವಾಯು|ಲಕ್ವ|ಸ್ಟ್ರೋಕ್|ಒಂದು\s*ಬದಿ.{0,20}(ಬಲಹೀನ|ಜೋಮು|ಮರಗಟ್ಟ)'),
-    ('Loss of consciousness or seizure', r'ಪ್ರಜ್ಞೆ\s*(ತಪ್ಪ|ಇಲ್ಲ|ಕಳೆದುಕೊಂಡ)|ಮೂರ್ಛೆ|ಮೂರ್ಚೆ|ಸೆಳೆತ|ಅಪಸ್ಮಾರ|ಫಿಟ್ಸ್|ಎಚ್ಚರ\s*(ಇಲ್ಲ|ತಪ್ಪ)|ಸ್ಪಂದಿಸುತ್ತಿಲ್ಲ|ಕುಸಿದು\s*ಬಿ'),
+    ('Loss of consciousness or seizure', r'ಪ್ರಜ್ಞೆ\s*(ತಪ್ಪ|ಇಲ್ಲ|ಕಳೆದುಕೊಂಡ)|ಮೂರ್ಛೆ|ಮೂರ್ಚೆ|ಸೆಳೆತ|ಅಪಸ್ಮಾರ|ಫಿಟ್ಸ್|ಎಚ್ಚರ\s*(ಇಲ್ಲ|ತಪ್ಪ)|ಸ್ಪಂದಿಸುತ್ತಿಲ್ಲ|ಕುಸಿದು\s*ಬಿ|'
+     r'ಕಣ್ಣು\s*ಕತ್ತಲೆ\s*ಬಂ'),
     ('Severe bleeding', r'(ತುಂಬಾ|ಹೆಚ್ಚು|ವಿಪರೀತ)\s*ರಕ್ತ|ರಕ್ತಸ್ರಾವ|ರಕ್ತ\s*(ಸುರಿ|ಹರಿ|ನಿಲ್ಲ)|ರಕ್ತ\s*ವಾಂತಿ|ವಾಂತಿಯಲ್ಲಿ\s*ರಕ್ತ|ಕೆಮ್ಮಿನಲ್ಲಿ\s*ರಕ್ತ|ಕಪ್ಪು\s*ಮಲ'),
     ('Severe allergic reaction', r'(ತುಟಿ|ನಾಲಿಗೆ|ಗಂಟಲು|ಮುಖ)\s*(ಊದಿ|ಊತ|ಬಾತು)|ಊತ.{0,15}(ತುಟಿ|ನಾಲಿಗೆ|ಗಂಟಲು)|ಗಂಟಲು\s*(ಮುಚ್ಚ|ಬಿಗಿ|ಕಟ್ಟ)'),
     ('Worst headache of life', r'(ಅತ್ಯಂತ|ತುಂಬಾ)\s*(ತೀವ್ರ|ಭಯಾನಕ).{0,12}ತಲೆನೋವು|ಇದ್ದಕ್ಕಿದ್ದಂತೆ\s*(ತೀವ್ರ|ಜೋರು).{0,12}ತಲೆನೋವು|ಜೀವನದ\s*ಅತ್ಯಂತ.{0,10}ತಲೆನೋವು'),
@@ -225,12 +234,13 @@ _RAW: List[Tuple[str, str]] = [
     ('Serious injury or accident', r'(ಮೇಲ್ಛಾವಣಿ|ಛಾವಣಿ|ಎತ್ತರ|ಮರ|ಮೆಟ್ಟಿಲು|ಬಾಲ್ಕನಿ)(ಯಿಂದ|ಇಂದ)\s*ಬಿದ್ದ|ಅಪಘಾತ|ಆಕ್ಸಿಡೆಂಟ್|ವಿದ್ಯುತ್\s*(ಆಘಾತ|ಶಾಕ್)|ಕರೆಂಟ್\s*(ಹೊಡೆ|ಶಾಕ್)|ಮುಳುಗ|ಗುಂಡು\s*ಬಿದ್ದ|ಚಾಕು\s*(ಹಾಕ|ಇರಿ)|ತಲೆಗೆ\s*ತೀವ್ರ\s*ಪೆಟ್ಟು'),
     ('Thoughts of self-harm', r'ಆತ್ಮಹತ್ಯೆ|ಸಾಯಬೇಕು|ಸಾಯಲು\s*ಬಯಸ|ಬದುಕಲು\s*ಇಷ್ಟ\s*ಇಲ್ಲ|ನನ್ನ\s*ಜೀವ\s*ತೆಗೆ|ತನಗೆ\s*ತಾನೇ\s*ಹಾನಿ'),
     # ---------------- Latin script: Hindi / Marathi / Kannada typed in English letters (very common on phones) ----------------
-    ('Chest pain or pressure', r'(seene|seena|sine|chhati|chaati|chati)\s*(mein|me|mai|men|madhe)?\s*(bahut\s*|tej\s*)?(dard|dukh|jakdan|jakad|dabav|dabaav|bhaari|bhari)|dil\s*ka\s*daura|chhatit\s*(dukh|kal)|ede\s*novu|yede\s*novu|ede\s*(bigi|ottada)'),
+    ('Chest pain or pressure', r'(seene|seena|sine|chhati|chaati|chati)\s*(mein|me|mai|men|madhe)?\s*(?:bahut\s*|tez\s*|tej\s*|zyada\s*|jyada\s*|bohot\s*)*(dard|dukh|jakdan|jakad|dabav|dabaav|bhaari|bhari)|dil\s*ka\s*daura|chhatit\s*(dukh|kal)|ede\s*novu|yede\s*novu|ede\s*(bigi|ottada)'),
     ('Severe trouble breathing', r'(saans|sans|swas|shwas)\s*(lene\s*(mein|me)\s*|gheta\s*)?(takleef|taklif|dikkat|pareshani|tras)|(saans|sans|shwas)\s*(nahi|nahin)\s*(aa|ale|le|gheta|yet)|dam\s*(ghut|phool)|usirata\s*(thondare|kashta)|usiru\s*(kattu|kasta|kashta)|usiraadalu\s*(aagutilla|kashta)'),
     ('Loss of consciousness or seizure', r'behosh|bebhan|dora\s*(pad|aya|aaya)|daura\s*pad|mirgi|fits\s*(aa|ale|aayi)|jhatke\s*(aa|ale)|prajne\s*(illa|tappi)|moorche|murche|apasmara|beshuddh'),
     ('Severe bleeding', r'(bahut|jyada|zyada|khup|jaast|tumba|hechchu)\s*(khoon|khun|rakt|raktasrav|rakta)|khoon\s*(beh|bah|nikal|nahi\s*ruk)|rakt\s*(vahat|vahtay|thambat\s*nahi)|raktasrav|raktasraava|khoon\s*ki\s*ulti|ulti\s*mein\s*khoon'),
     ('Possible stroke signs', r'chehra\s*(tedha|latak)|lakwa|laqwa|lakva|bolne\s*mein\s*dikkat|bolta\s*yet\s*nahi|ardhangvayu|paarshwavayu|pakshaghat'),
-    ('Poisoning or overdose', r'zeher|jahar|jehar|vish\s*(pi|pyal|khaa|khal)|kitnashak|phenyl\s*pi|hechchu\s*matre|vishavannu'),
+    ('Poisoning or overdose', r'zeher|jahar|jehar|vish\s*(pi|pyal|khaa|khal)|kitnashak|phenyl\s*pi|hechchu\s*matre|vishavannu|'
+     r'(dawai|davai|dawa)\s*ki\s*(puri|saari|poori)\s*(bottle|dabba|dibbi)\s*(pi|pee|kha)|(puri|saari|poori)\s*bottle\s*(pi|pee|kha)'),
     ('Snake or scorpion bite', r'(saanp|saap|havu|haavu)\s*(ne\s*)?(kaata|kata|kaat|dasa|chavla|chaval|kachchi|kaccha|kacchide)|bichhu\s*(ne\s*)?(kaata|kata)|vinchu\s*chaval|chelu\s*(kutuka|kacch)'),
     ('Severe allergic reaction', r'(hont|jeebh|jibh|gala|jibha)\s*(sooj|suj|suja|sujle|sujlay)|gala\s*band'),
     ('Serious injury or accident', r'current\s*(laga|lag\s*gaya)|karant\s*lagla|dub\s*(gaya|raha)'),
@@ -242,7 +252,14 @@ PATTERNS: List[Tuple[str, 're.Pattern']] = [(label, re.compile(normalize(rx))) f
 
 # A negation that FOLLOWS the symptom, in the same clause: "सीने में दर्द नहीं है" (no chest pain). Deliberately narrow: when in doubt, alert.
 # \b does not work after Devanagari/Kannada combining marks, so "not followed by another letter" is spelled out.
-_NEGATION = re.compile(r'^\s*(?:है\s*)?(नहीं|नही|नाही|नव्हे|ಇಲ್ಲ|nahi|nahin|naahi|illa)(?![\u0900-\u097f\u0c80-\u0cffA-Za-z])')
+# Common intensifier/emphasis words routinely sit BETWEEN the symptom and the negation particle in natural speech
+# ("सीने में दर्द बिल्कुल नहीं है" = "no chest pain AT ALL", "...दर्द तो नहीं है" = an emphatic "no pain, right?") - the
+# group below is repeatable (zero or more, in any order) so any number of them can appear, same fix as the stacked
+# chest-pain intensifiers ("bahut tez dard") elsewhere in this file. Deliberately a short, curated list rather than
+# "any word", so this never grows into matching something that is not really a filler.
+_NEGATION_FILLER = r'है|तो|ही|भी|बिल्कुल|कतई|एकदम|जरा|अभी|अजिबात|मुळीच|आत्ता|ಖಂಡಿತ|ಈಗ|ab\s*tak|abhi|bilkul|katai|ekdam|ajibat|mulich|khandit|khanditha'
+_NEGATION = re.compile(
+    r'^\s*(?:(?:' + _NEGATION_FILLER + r')\s*)*(नहीं|नही|नाही|नव्हे|ಇಲ್ಲ|nahi|nahin|naahi|illa)(?![\u0900-\u097f\u0c80-\u0cffA-Za-z])')
 _CLAUSE_BREAK = re.compile(r'[,;.!?।]|लेकिन|मगर|पर\s|और\s|पण\s|आणि|ಆದರೆ|ಮತ್ತು|\bbut\b|\band\b')
 
 

@@ -105,7 +105,8 @@ class MedicalAnalyzer:
             logger.error("Image analysis failed entirely for %s", image_path, exc_info=True)
             return {
                 'error': f"Image analysis failed: {str(e)}",
-                'recommendations': ['Unable to analyze image. Please consult a healthcare professional.'],
+                'recommendations': ['Unable to analyze image. Please consult a healthcare professional.',
+                                    localize_text('If this looks serious, do not wait for a photo check: call {EMERGENCY_NUMBER} now or see a doctor.', get_app_region())],
                 'disclaimer': 'This tool cannot replace professional medical advice.'
             }
 

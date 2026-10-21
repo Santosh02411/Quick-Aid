@@ -10,5 +10,25 @@
   "quickaid/i18n/catalog.py keys: em.*, js.high_*, js.basic_notice, consent.*, lang.notice"
  ],
  "reviewers": [],
- "last_review": null
+ "last_review": null,
+ "ai_linguistic_passes": [
+  {
+   "date": "2026-10-18",
+   "performed_by": "AI assistant (not the same instance that wrote the original translations)",
+   "scope": "Every string in catalog.py and emergency.py: medical accuracy, natural phrasing, terminology consistency, plus stress-testing detection with colloquial/idiomatic/negated phrasing not in any existing dataset.",
+   "is_not": "Not native-speaker certification. Not clinician review. Does not change reviewed_by_clinician below.",
+   "confidence": {
+    "hi": "strongest",
+    "mr": "good (shared Devanagari script, closely related grammar to Hindi)",
+    "kn": "most limited - review this one first"
+   },
+   "found_and_fixed": [
+    "False-alarm bug: intensifier words between a symptom and its negation (e.g. \"बिल्कुल नहीं\") broke negation detection",
+    "7 colloquial/idiomatic detection gaps across hi/mr/kn (e.g. \"chest is bursting\", \"darkness before the eyes\" for fainting)",
+    "Understatement gap: a minimising qualifier (\"a little heaviness\") did not match where only an amplifying one did",
+    "One minor Kannada transliteration nit in a non-safety-critical accessibility label"
+   ],
+   "read_as_accurate_but_unconfirmed": "First-aid guidance steps, the consent notice, and the emergency-page summaries all read as medically accurate and natural on this pass - still awaiting the human review below."
+  }
+ ]
 }
