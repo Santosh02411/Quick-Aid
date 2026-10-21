@@ -1,0 +1,3 @@
+#!/bin/sh
+# Blocks a commit that would add a secret or a forbidden file. Install once:  sh scripts/install_hooks.sh
+python scripts/secret_scan.py --staged || { echo "Commit blocked: see above. (Fake values: add '# secret-scan: allow' to the line.)"; exit 1; }
