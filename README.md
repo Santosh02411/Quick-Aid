@@ -320,24 +320,32 @@ python evaluation/run_evaluation.py --weak-model  # also simulate an unsafe AI t
 python evaluation/run_evaluation.py --live        # also run the real Gemini model (needs GEMINI_API_KEY)
 ```
 
+For running against the real model specifically — exact commands, what each metric means, and how to compare prompt/model versions without accidentally comparing apples to oranges — see **`evaluation/LIVE_EVALUATION.md`**.
+
 It exits non-zero if a safety threshold is missed, and runs in CI. Datasets are in `evaluation/datasets/`; the full report is `evaluation/reports/latest.md`.
 
 | What was measured | Result |
 |---|---|
 | Main set (97 cases, 29 emergencies): emergency recall / false alarms / severe under-triage | 100% / 0% / 0% |
-| Unsafe or malformed **model outputs** pushed through the real code (24 cases) | 24 / 24 handled safely |
-| Photo-quality checks on synthetic photos (12 cases) | 12 / 12 right; every unusable photo caught |
-| **Held-out set 1** (written after tuning, run once, rules unchanged) | **emergency recall 11.8%** (2 of 17) |
-| **Held-out set 2** (fresh, realistic phrasing incl. Hindi/Kannada, run once, rules not changed afterwards) | **emergency recall 30.8%** (8 of 26), 0% false alarms |
-| Live Gemini model | **not measured** (needs your key: `--live`) |
+| Unsafe or malformed **model outputs** pushed through the real code (30 cases, incl. poisoning / severe allergic reaction / unconsciousness / breathing difficulty) | 30 / 30 handled safely |
+| **Photo-quality** (is this a usable photo?) checks on synthetic photos across a realistic skin-tone range (12 scored cases + a dedicated fairness suite) | 12 / 12 right; see the skin-tone note below - **this is not a measurement of medical interpretation accuracy** |
+| **Held-out set 1** (written after tuning, run once, then fixed, now no longer fresh) | recall **11.8% → 100%** after the fixes (`HOLDOUT_FIRST_RUN.md`) |
+| **Held-out set 2** (fresh, incl. Hindi/Kannada, run once → fixed, now no longer fresh) | recall **30.8% → 100%** after the fixes (`HOLDOUT2_RESULT.md`) |
+| **Held-out set 3** (fresh, incl. Devanagari/Kannada script, typos, colloquial phrasing, run once → fixed, now no longer fresh) | recall **37.9% → 100%** after the fixes (`HOLDOUT3_RESULT.md`) |
+| **Held-out set 4** (fresh: children/pregnancy/older adults, several cases grounded in WHO/NHS published danger signs, plus contradictory phrasing; run once, **left unfixed by deliberate choice** - see below) | recall **22.2%**, not improved (`HOLDOUT4_RESULT.md`) |
+| Live Gemini model | **not measured** (needs your key and real network access: see `evaluation/LIVE_EVALUATION.md`) |
 
 **How to read this.**
 
 - The 100% on the main set is **in-sample**: those cases were written while the rules were being tuned, so it mostly shows the rules fit their own tests.
-- On wording the rules had never seen, the keyword scanner **misses most emergencies**. It is precise (no false alarms) but narrow. The first-contact results are preserved in `HOLDOUT_FIRST_RUN.md` and `HOLDOUT2_RESULT.md` precisely so they cannot be quietly improved away.
-- Therefore: **the AI model is the primary reader and the rules are only a floor.** Without an AI model (basic mode) the app will miss emergencies phrased in unusual words or other languages. The interface now says this on the dashboard and on every basic-mode result, keeps the emergency number visible during every check, and never answers an unrecognised description with reassurance.
+- **Each held-out set tells the same story once, honestly, before any fix:** real recall on wording the rules have never seen is much lower than the main set suggests (11.8%, then 30.8%, then 37.9% — each a *different* fresh set, each written after the previous one's fixes). Every one of those first-contact results is preserved exactly as measured, specifically so they cannot be quietly improved away: `HOLDOUT_FIRST_RUN.md`, `HOLDOUT2_RESULT.md`, `HOLDOUT3_RESULT.md`. A round of fixes then brought each set to 100% recall / 0% severe under-triage / 0% false alarms — verified, not assumed, by rerunning after every change.
+- **What that pattern means:** three cycles of "fresh set finds gaps → fixes close them → recall returns to 100%" is evidence the fixes are real, not evidence the rules have become complete. A **fourth** fresh set would very plausibly still find new gaps in wording nobody anticipated — hand-written patterns cannot be made complete by writing more patterns, only narrower. Detection now goes beyond single-phrase keyword matching in three ways: a **combination-signal layer** (e.g. "went pale" + "clutched his arm" + "fell down" together imply a cardiac emergency with no single strong phrase), a **typo-tolerance layer** (a curated misspelling table, plus careful fuzzy matching restricted to long words individually checked against real-word collisions), and **one-shot context parsing** (duration/age/severity now apply to a single message, not only the question-and-answer interview).
+- Therefore: **the AI model is the primary reader and the rules are only a floor.** Without an AI model (basic mode) the app can still miss emergencies phrased in genuinely novel words or other languages. The interface says this on the dashboard and on every basic-mode result, keeps the emergency number visible during every check (including when the pipeline fails outright — a last-resort text scan runs before any generic error is shown, at every stage: one-shot check, interview start/answer/finish, photo check, and chat), and never answers an unrecognised description with reassurance.
+- A new `false_reassurance_rate` metric measures how often the **model's own raw text** claims reassurance ("nothing to worry about", "this will clear up on its own"...) on a case that genuinely needed caution — captured before the safety net rewrites it, so it is a read on model quality, not on what the person actually sees (the net corrects it every time, which is what the guardrail set checks separately).
+- **Held-out set 4 was deliberately left unfixed.** It specifically targets children, pregnancy and older adults (several cases grounded in WHO/UNICEF IMCI, WHO/Government-of-India obstetric, and NHS geriatric published danger-sign criteria, not just developer judgement), plus contradictory and hedging descriptions. Its 22.2% recall is **not** a bug that slipped through; it is the honest result of running a fresh set **and not tuning the rules against it**, by explicit choice, so the project keeps at least one genuinely untouched measurement rather than converging every set toward 100% through repeated exposure. See `HOLDOUT4_RESULT.md` for exactly what was missed and the sources used.
+- **Image quality and medical interpretation are different claims, and only one of them is measured here.** The automatic photo-quality gate (blur, darkness, contrast, resolution, glare) runs on-server before any AI call and is what the table above tests - it answers "is this photo usable at all", never "what does it show". Testing it found a real fairness problem: under identical lighting, the darkness/contrast checks penalised photos of darker skin tones far more readily, because absolute pixel brightness is a biased proxy for "not enough light" once different skin tones (which naturally reflect different amounts of light) are considered. That has been **measurably reduced** (see `quickaid/ai/image_quality.py` and `tests/test_image_quality_fairness.py`) but **not eliminated** - it is a structural limit of judging brightness from one photo with no reference, not something threshold-tuning alone can fully close. Separately, EXIF-based photo rotation correction existed but had never been tested; it now is (`tests/test_image_orientation_and_content.py`), alongside photos with no EXIF data, and photos that are technically "good quality" but unrelated to any medical concern (the model's own prompt handles that classification, not the pixel-level quality gate - see the same test file for why that split exists). **None of this tests medical interpretation accuracy - whether the AI correctly identifies what a wound or rash actually is - which has no real, independently-labelled photo set to measure against yet** (`evaluation/reference/README.md` explains what one would need and why none ships with this app). Do not describe image analysis as validated injury or disease detection; describe it as what has actually been measured, which is photo-usability screening.
 - The datasets were written by the developers, are **not clinician-validated**, and are small. These numbers are an engineering regression check, **not evidence that the app is clinically accurate or safe for real patients**.
-- Next steps: run `--live` and publish the numbers; have a clinician review and extend the datasets; add more languages; consider a dedicated second AI pass for emergency detection.
+- Next steps: run `--live` and publish the numbers (see `evaluation/LIVE_EVALUATION.md` for exact commands and what each metric means); have a clinician review and extend the datasets; build the children/pregnancy/older-adult vocabulary gaps `HOLDOUT4_RESULT.md` lists, then measure against a fresh, not-yet-tuned held-out set 5; get a real, independently-labelled photo set for medical-interpretation accuracy (not just photo-quality) testing.
 
 ---
 ## AI Evaluation Dashboard
@@ -463,8 +471,17 @@ The interface and, above all, the **emergency guidance** work in English, **ह�
 
 ## Testing
 
+Tests need more than the app itself (pytest, playwright, lint/security tools), so install the **dev** requirements first — in a **fresh
+virtual environment**, not on top of one that already has `requirements.txt` installed from Quick Start, to avoid a stale or partial
+environment masking a real problem:
+
 ```bash
-pytest                                    # ~1,100 tests, mocked AI only (no network), about 94% coverage
+python -m venv .venv-test && source .venv-test/bin/activate   # a clean environment, separate from Quick Start's
+pip install -r requirements-dev.txt       # installs requirements.txt too, plus pytest, playwright, ruff, bandit...
+```
+
+```bash
+pytest                                    # ~1,300 tests, mocked AI only (no network), about 94% coverage
 pytest --cov=quickaid --cov-report=term-missing
 python -m playwright install chromium && npm install axe-core   # once, for the browser suite
 AXE_PATH=node_modules/axe-core/axe.min.js pytest -m browser tests/e2e   # real browser journeys + accessibility audit
