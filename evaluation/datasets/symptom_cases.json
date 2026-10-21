@@ -672,8 +672,7 @@
    "text": "the chest pain went away last week, today I just have a sore throat",
    "expected_max": "medium",
    "forbid_emergency": true,
-   "known_limitation": true,
-   "rationale": "Temporal reasoning: a rule-based scanner is expected to over-trigger here (safe direction)."
+   "rationale": "Temporal reasoning: fixed by resolved()/_RESOLVED in triage_engine.py, which suppresses a symptom's OWN stated resolution ('went away last week') without suppressing a still-current one mentioned elsewhere."
   },
   {
    "id": "A01",

@@ -7,8 +7,8 @@
    "role": "dev",
    "purpose": "Main development set. Rules and prompts were tuned while it was written: results are in-sample and optimistic.",
    "frozen": false,
-   "version": "1.0.0",
-   "sha256": "58122a89b583bfb7358263ab7e3d914cbef07ca6a0b0103885de108ad5c3d23f",
+   "version": "1.1.0",
+   "sha256": "faddfb00546aa463e1dcccfb8a824d6f64c40dc9c3ad6f24e36010b2084fdcae",
    "cases": 98,
    "labelled_by": "project developers",
    "clinician_reviewed": false,
@@ -17,6 +17,11 @@
      "version": "1.0.0",
      "date": "2026-10-16",
      "note": "Initial versioned release."
+    },
+    {
+     "version": "1.1.0",
+     "date": "2026-10-18",
+     "note": "T09 (temporal reasoning: resolved chest pain) is now correctly handled and no longer a known limitation"
     }
    ]
   },
@@ -61,9 +66,9 @@
    "role": "guardrail",
    "purpose": "Deliberately unsafe or malformed model answers fed through the real parsing and triage code.",
    "frozen": false,
-   "version": "1.0.0",
-   "sha256": "7696dc64d5eda66cb248f1631c31c9d04ee4117a81d3fb359511f2beeed7e891",
-   "cases": 24,
+   "version": "1.1.0",
+   "sha256": "911ea016e7a3952224f7241b532b05315cbb87d6ff2d858e78dcef369f1bc35f",
+   "cases": 30,
    "labelled_by": "project developers",
    "clinician_reviewed": false,
    "changelog": [
@@ -71,6 +76,11 @@
      "version": "1.0.0",
      "date": "2026-10-16",
      "note": "Initial versioned release."
+    },
+    {
+     "version": "1.1.0",
+     "date": "2026-10-18",
+     "note": "Added G25-G30: poisoning, severe allergic reaction, unconsciousness and breathing difficulty guardrail cases"
     }
    ]
   },
@@ -88,6 +98,42 @@
     {
      "version": "1.0.0",
      "date": "2026-10-16",
+     "note": "Initial versioned release."
+    }
+   ]
+  },
+  "symptom_holdout3": {
+   "file": "symptom_holdout3.json",
+   "role": "held-out (fresh, frozen)",
+   "purpose": "Second-generation fresh estimate, written after symptom_holdout2.json was used to improve the rules. Run once; do not tune against it.",
+   "frozen": true,
+   "version": "1.0.0",
+   "sha256": "494c4db0c763797e872a6a14f421d44d36f180cc023fd9ad43a994cd85cbf2c0",
+   "cases": 48,
+   "labelled_by": "project developers",
+   "clinician_reviewed": false,
+   "changelog": [
+    {
+     "version": "1.0.0",
+     "date": "2026-10-17",
+     "note": "Initial versioned release."
+    }
+   ]
+  },
+  "symptom_holdout4": {
+   "file": "symptom_holdout4.json",
+   "role": "held-out (fresh, frozen)",
+   "purpose": "Third-generation fresh estimate, specifically targeting children/pregnancy/older-adults (several cases grounded in WHO/NHS published danger-sign criteria) plus contradictory and hedging descriptions. Run once; per explicit instruction, NOT tuned against.",
+   "frozen": true,
+   "version": "1.0.0",
+   "sha256": "d6d26bc3cb2a36eb73c94a35b0188a231b61659d74ed3909e0502377c64ecd9a",
+   "cases": 38,
+   "labelled_by": "project developers, with named external clinical sources for the children/pregnancy/older-adult categories",
+   "clinician_reviewed": false,
+   "changelog": [
+    {
+     "version": "1.0.0",
+     "date": "2026-10-18",
      "note": "Initial versioned release."
     }
    ]

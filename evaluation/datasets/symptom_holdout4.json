@@ -1,0 +1,329 @@
+{
+ "name": "Quick Aid HELD-OUT set 4 (fresh, grounded in external clinical sources where noted)",
+ "version": 1,
+ "labelling_policy": "Same policy as symptom_cases.json. Cases marked with a \"source\" field take their ground truth from an independently published clinical reference (WHO IMCI, WHO/Govt-of-India obstetric danger signs, NHS falls/sepsis guidance), not from the developer's own judgement alone - see each case's \"source\" field and HOLDOUT4_RESULT.md for the search queries used. Written to specifically cover children, pregnancy, older adults (including atypical presentation - confusion/falls WITHOUT fever, a known difficult pattern), contradictory/hedging descriptions, and realistic misspellings/Indian-English colloquialisms. Run ONCE. Per explicit instruction this round, rule changes are NOT made in response to this specific run's failures - see HOLDOUT4_RESULT.md for what was found and the decision to leave it unfixed pending a dedicated, separately-reviewed round.",
+ "limitations": "Written by the project developers (with external clinical sources for the three named categories), not clinician-validated as a whole, small. Several cases are deliberately hedging/contradictory, which has no single obviously \"correct\" machine answer - the labels reflect the safety-first reading (treat ambiguity suggestive of an emergency as an emergency), not a clinical certainty.",
+ "cases": [
+  {
+   "id": "H401",
+   "category": "emergency",
+   "mode": "oneshot",
+   "text": "my 8-month-old won't breastfeed at all and just lies there not really reacting to anything",
+   "emergency": true,
+   "expected_min": "high",
+   "source": "WHO/UNICEF IMCI general danger signs (ages 2mo-5y): inability to drink/breastfeed, vomiting everything, convulsions, lethargy/unconsciousness"
+  },
+  {
+   "id": "H402",
+   "category": "emergency",
+   "mode": "oneshot",
+   "text": "the baby has been vomiting up everything we give her for the last few hours, can't keep anything down",
+   "emergency": true,
+   "expected_min": "high",
+   "source": "WHO/UNICEF IMCI general danger signs (ages 2mo-5y): inability to drink/breastfeed, vomiting everything, convulsions, lethargy/unconsciousness"
+  },
+  {
+   "id": "H403",
+   "category": "emergency",
+   "mode": "oneshot",
+   "text": "my 3 year old had a fit that lasted a couple of minutes, shaking all over, during this fever he has now",
+   "emergency": true,
+   "expected_min": "high",
+   "source": "WHO/UNICEF IMCI general danger signs (ages 2mo-5y): inability to drink/breastfeed, vomiting everything, convulsions, lethargy/unconsciousness"
+  },
+  {
+   "id": "H404",
+   "category": "emergency",
+   "mode": "oneshot",
+   "text": "he's only 2 and so sleepy I can barely wake him up, he was fine yesterday",
+   "emergency": true,
+   "expected_min": "high",
+   "source": "WHO/UNICEF IMCI general danger signs (ages 2mo-5y): inability to drink/breastfeed, vomiting everything, convulsions, lethargy/unconsciousness"
+  },
+  {
+   "id": "H405",
+   "category": "routine",
+   "mode": "oneshot",
+   "text": "my 4 year old has a mild runny nose and is eating and playing normally",
+   "source": "WHO/UNICEF IMCI general danger signs (ages 2mo-5y): inability to drink/breastfeed, vomiting everything, convulsions, lethargy/unconsciousness",
+   "forbid_emergency": true
+  },
+  {
+   "id": "H406",
+   "category": "routine",
+   "mode": "oneshot",
+   "text": "toddler has a slight cough, no fever, drinking fluids fine, acting completely normal",
+   "source": "WHO/UNICEF IMCI general danger signs (ages 2mo-5y): inability to drink/breastfeed, vomiting everything, convulsions, lethargy/unconsciousness",
+   "forbid_emergency": true
+  },
+  {
+   "id": "H407",
+   "category": "emergency",
+   "mode": "oneshot",
+   "text": "newborn hasn't fed properly since this morning and feels floppy when I pick her up",
+   "emergency": true,
+   "expected_min": "high",
+   "source": "WHO/UNICEF IMCI general danger signs (ages 2mo-5y): inability to drink/breastfeed, vomiting everything, convulsions, lethargy/unconsciousness"
+  },
+  {
+   "id": "H408",
+   "category": "emergency",
+   "mode": "oneshot",
+   "text": "my son is 5, he's had a high fever for 2 days and today he seems confused, doesn't know where he is",
+   "emergency": true,
+   "expected_min": "high",
+   "source": "WHO/UNICEF IMCI general danger signs (ages 2mo-5y): inability to drink/breastfeed, vomiting everything, convulsions, lethargy/unconsciousness"
+  },
+  {
+   "id": "H409",
+   "category": "emergency",
+   "mode": "oneshot",
+   "text": "I'm 30 weeks pregnant and I just had a fit, I'm shaking all over",
+   "emergency": true,
+   "expected_min": "high",
+   "source": "WHO Antenatal Care Guideline danger signs / Govt of India (vikaspedia.in) pregnancy danger signs"
+  },
+  {
+   "id": "H410",
+   "category": "emergency",
+   "mode": "oneshot",
+   "text": "my waters broke but I'm not due for another 6 weeks and I'm not having any contractions",
+   "emergency": true,
+   "expected_min": "high",
+   "source": "WHO Antenatal Care Guideline danger signs / Govt of India (vikaspedia.in) pregnancy danger signs"
+  },
+  {
+   "id": "H411",
+   "category": "emergency",
+   "mode": "oneshot",
+   "text": "I'm 34 weeks and I haven't felt the baby move since yesterday",
+   "emergency": true,
+   "expected_min": "high",
+   "source": "WHO Antenatal Care Guideline danger signs / Govt of India (vikaspedia.in) pregnancy danger signs"
+  },
+  {
+   "id": "H412",
+   "category": "emergency",
+   "mode": "oneshot",
+   "text": "severe headache and my vision keeps going blurry, I'm 8 months pregnant",
+   "emergency": true,
+   "expected_min": "high",
+   "source": "WHO Antenatal Care Guideline danger signs / Govt of India (vikaspedia.in) pregnancy danger signs"
+  },
+  {
+   "id": "H413",
+   "category": "emergency",
+   "mode": "oneshot",
+   "text": "it's been 14 hours of labour pains and the baby still hasn't come",
+   "emergency": true,
+   "expected_min": "high",
+   "source": "WHO Antenatal Care Guideline danger signs / Govt of India (vikaspedia.in) pregnancy danger signs"
+  },
+  {
+   "id": "H414",
+   "category": "emergency",
+   "mode": "oneshot",
+   "text": "the placenta hasn't come out and it's been over an hour since the baby was born",
+   "emergency": true,
+   "expected_min": "high",
+   "source": "WHO Antenatal Care Guideline danger signs / Govt of India (vikaspedia.in) pregnancy danger signs"
+  },
+  {
+   "id": "H415",
+   "category": "emergency",
+   "mode": "oneshot",
+   "text": "I'm pregnant and there's a really foul smell coming from the discharge, plus I have a fever",
+   "emergency": true,
+   "expected_min": "high",
+   "source": "WHO Antenatal Care Guideline danger signs / Govt of India (vikaspedia.in) pregnancy danger signs"
+  },
+  {
+   "id": "H416",
+   "category": "routine",
+   "mode": "oneshot",
+   "text": "I'm 20 weeks pregnant and feeling a bit more tired than usual, otherwise fine",
+   "source": "WHO Antenatal Care Guideline danger signs / Govt of India (vikaspedia.in) pregnancy danger signs",
+   "forbid_emergency": true
+  },
+  {
+   "id": "H417",
+   "category": "routine",
+   "mode": "oneshot",
+   "text": "mild morning sickness, 10 weeks pregnant, nothing unusual",
+   "source": "WHO Antenatal Care Guideline danger signs / Govt of India (vikaspedia.in) pregnancy danger signs",
+   "forbid_emergency": true
+  },
+  {
+   "id": "H418",
+   "category": "see_soon",
+   "mode": "oneshot",
+   "text": "a little swelling in my ankles by the end of the day, 24 weeks pregnant",
+   "expected_min": "medium",
+   "source": "WHO Antenatal Care Guideline danger signs / Govt of India (vikaspedia.in) pregnancy danger signs",
+   "forbid_emergency": true
+  },
+  {
+   "id": "H419",
+   "category": "emergency",
+   "mode": "oneshot",
+   "text": "my 80 year old father fell and hit his head, he seems a bit out of it now",
+   "emergency": true,
+   "expected_min": "high",
+   "source": "NHS falls guidance + NHS sepsis red flags + geriatric-infection literature (atypical presentation: confusion/falls without fever)"
+  },
+  {
+   "id": "H420",
+   "category": "emergency",
+   "mode": "oneshot",
+   "text": "grandma is 84, she's suddenly very confused today and keeps falling over, no fever though",
+   "emergency": true,
+   "expected_min": "high",
+   "source": "NHS falls guidance + NHS sepsis red flags + geriatric-infection literature (atypical presentation: confusion/falls without fever)"
+  },
+  {
+   "id": "H421",
+   "category": "emergency",
+   "mode": "oneshot",
+   "text": "my elderly mother has blue lips and is breathing really fast, more than one breath every couple of seconds",
+   "emergency": true,
+   "expected_min": "high",
+   "source": "NHS falls guidance + NHS sepsis red flags + geriatric-infection literature (atypical presentation: confusion/falls without fever)"
+  },
+  {
+   "id": "H422",
+   "category": "emergency",
+   "mode": "oneshot",
+   "text": "grandfather hasn't passed urine in about 14 hours and seems very unwell and drowsy",
+   "emergency": true,
+   "expected_min": "high",
+   "source": "NHS falls guidance + NHS sepsis red flags + geriatric-infection literature (atypical presentation: confusion/falls without fever)"
+  },
+  {
+   "id": "H423",
+   "category": "emergency",
+   "mode": "oneshot",
+   "text": "my 90 year old grandmother has a new purple rash that's spreading and she feels cold to the touch",
+   "emergency": true,
+   "expected_min": "high",
+   "source": "NHS falls guidance + NHS sepsis red flags + geriatric-infection literature (atypical presentation: confusion/falls without fever)"
+  },
+  {
+   "id": "H424",
+   "category": "routine",
+   "mode": "oneshot",
+   "text": "my 75 year old dad has mild joint stiffness in the morning like usual, nothing new",
+   "source": "NHS falls guidance + NHS sepsis red flags + geriatric-infection literature (atypical presentation: confusion/falls without fever)",
+   "forbid_emergency": true
+  },
+  {
+   "id": "H425",
+   "category": "routine",
+   "mode": "oneshot",
+   "text": "grandmother, 82, slightly more tired this week, sleeping a bit more, otherwise herself",
+   "source": "NHS falls guidance + NHS sepsis red flags + geriatric-infection literature (atypical presentation: confusion/falls without fever)",
+   "forbid_emergency": true
+  },
+  {
+   "id": "H426",
+   "category": "emergency",
+   "mode": "oneshot",
+   "text": "I don't know if this is serious or not but I have chest pain and I'm also not sure if I'm just anxious",
+   "emergency": true,
+   "expected_min": "high"
+  },
+  {
+   "id": "H427",
+   "category": "emergency",
+   "mode": "oneshot",
+   "text": "it's probably nothing but my left arm has gone numb and I also have a headache, not sure if related",
+   "emergency": true,
+   "expected_min": "high"
+  },
+  {
+   "id": "H428",
+   "category": "emergency",
+   "mode": "oneshot",
+   "text": "maybe it's just heartburn, maybe it's my heart, there's a tight feeling in my chest that started an hour ago",
+   "emergency": true,
+   "expected_min": "high"
+  },
+  {
+   "id": "H429",
+   "category": "emergency",
+   "mode": "oneshot",
+   "text": "the pain comes and goes, sometimes it's really bad sometimes it's nothing, it's in my chest",
+   "emergency": true,
+   "expected_min": "high"
+  },
+  {
+   "id": "H430",
+   "category": "emergency",
+   "mode": "oneshot",
+   "text": "I feel fine actually but my wife says my lips looked blue for a second, I don't really feel short of breath",
+   "emergency": true,
+   "expected_min": "high"
+  },
+  {
+   "id": "H431",
+   "category": "routine",
+   "mode": "oneshot",
+   "text": "something feels off today, hard to explain, just not myself",
+   "forbid_emergency": true
+  },
+  {
+   "id": "H432",
+   "category": "routine",
+   "mode": "oneshot",
+   "text": "mixed feelings about how I feel, a bit of everything really, nothing specific",
+   "forbid_emergency": true
+  },
+  {
+   "id": "H433",
+   "category": "emergency",
+   "mode": "oneshot",
+   "text": "chest is really tihgt and i cant braethe properly",
+   "emergency": true,
+   "expected_min": "high"
+  },
+  {
+   "id": "H434",
+   "category": "emergency",
+   "mode": "oneshot",
+   "text": "my hubby collapsd and is not weking up at all",
+   "emergency": true,
+   "expected_min": "high"
+  },
+  {
+   "id": "H435",
+   "category": "emergency",
+   "mode": "oneshot",
+   "text": "baby swallowd a hole bottel of medcine",
+   "emergency": true,
+   "expected_min": "high"
+  },
+  {
+   "id": "H436",
+   "category": "emergency",
+   "mode": "oneshot",
+   "text": "severe chest pain na, feeling very uneasy only",
+   "emergency": true,
+   "expected_min": "high"
+  },
+  {
+   "id": "H437",
+   "category": "see_soon",
+   "mode": "oneshot",
+   "text": "he is having too much vomiting and loose motions since morning, very weak also",
+   "expected_min": "medium",
+   "forbid_emergency": true
+  },
+  {
+   "id": "H438",
+   "category": "see_soon",
+   "mode": "oneshot",
+   "text": "stomach is paining too much since yesterday, not able to eat anything",
+   "expected_min": "medium",
+   "forbid_emergency": true
+  }
+ ]
+}
