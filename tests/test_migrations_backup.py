@@ -58,7 +58,7 @@ class TestMigrations:
     def test_a_legacy_database_is_adopted_not_recreated(self, env):
         path = str(env / 'legacy.db')
         legacy_db(path)
-        assert migrations.migrate(path) == [1, 2, 3, 4, 5]
+        assert migrations.migrate(path) == [m.version for m in migrations.MIGRATIONS]
         c = sqlite3.connect(path)
         c.row_factory = sqlite3.Row
         assert c.execute('SELECT username FROM users').fetchone()['username'] == 'old'              # data survived
@@ -106,7 +106,7 @@ class TestMigrations:
         legacy_db(path)
         migrations.migrate(path)
         backups = backup.list_backups(path)
-        assert len(backups) == 1 and backups[0]['label'] == 'pre-migration-v0-to-v5'
+        assert len(backups) == 1 and backups[0]['label'] == f'pre-migration-v0-to-v{migrations.LATEST_VERSION}'
         assert backup.verify_backup(str(env / 'backups' / backups[0]['file']))['tables']['users'] == 1
 
     def test_an_empty_database_is_not_backed_up(self, env):
@@ -126,7 +126,7 @@ class TestMigrations:
             migrations.migrate(path, target=99)
         c = sqlite3.connect(path)
         assert c.execute("SELECT name FROM sqlite_master WHERE name='half_done'").fetchone() is None     # nothing half-applied
-        assert c.execute('SELECT MAX(version) FROM schema_migrations').fetchone()[0] == 5
+        assert c.execute('SELECT MAX(version) FROM schema_migrations').fetchone()[0] == migrations.LATEST_VERSION
 
     def test_editing_an_applied_migration_is_detected(self, env):
         path = str(env / 'x.db')
@@ -141,7 +141,7 @@ class TestMigrations:
         migrations.migrate(path)
         c = sqlite3.connect(path)
         rows = c.execute('SELECT version, name, checksum, applied_at FROM schema_migrations ORDER BY version').fetchall()
-        assert [r[0] for r in rows] == [1, 2, 3, 4, 5] and all(r[2] and r[3] for r in rows)
+        assert [r[0] for r in rows] == [m.version for m in migrations.MIGRATIONS] and all(r[2] and r[3] for r in rows)
 
     def test_version_numbers_are_unique_and_contiguous(self):
         assert [m.version for m in migrations.MIGRATIONS] == list(range(1, len(migrations.MIGRATIONS) + 1))
@@ -286,15 +286,49 @@ class TestBackups:
         assert len([n for n in names if n.startswith('quickaid-')]) == 3 and any(n.startswith('pre-migration') for n in names)
         assert len(list((env / 'backups').glob('quickaid-*.db.gz'))) == 3 and len(list((env / 'backups').glob('quickaid-*.json'))) == 3
 
-    def test_restore_brings_back_deleted_data_and_saves_what_it_replaced(self, db_module, env):
+    def test_restore_brings_back_lost_data_and_saves_what_it_replaced(self, db_module, env):
         path = self.populated(db_module)
         m = backup.create_backup(path)
-        db_module.delete_history(1)
-        db_module.delete_user(1)
+        with db_module.get_connection() as c:                          # accidental loss (a bug, a disk fault), NOT a deletion by the user
+            c.execute('DELETE FROM symptom_analyses')
+            c.execute('DELETE FROM users')
         assert db_module.get_user_by_id(1) is None
         result = backup.restore_backup(str(env / 'backups' / m['file']), path)
         assert result['tables']['users'] == 1 and result['previous_database_saved_as'].startswith('pre-restore')
         assert db_module.get_history(1)[0]['symptom_text'] == 'private symptoms'
+
+    def test_restore_never_resurrects_what_people_deleted_after_the_backup(self, db_module, env):
+        path = self.populated(db_module)
+        keep = db_module.save_symptom_analysis(1, 'delete me later', {'urgency_level': 'low'})
+        extra = db_module.create_user('leaver', 'leaver@example.com', 'password123')
+        db_module.save_symptom_analysis(extra['id'], 'also private', {'urgency_level': 'low'})
+        m = backup.create_backup(path)                                   # a backup that still contains all of it
+        from quickaid.core import history_repo
+        assert history_repo.delete_entry(1, 'symptom', keep)             # an entry deleted after the backup...
+        db_module.delete_user(extra['id'])                               # ...and a whole account
+        result = backup.restore_backup(str(env / 'backups' / m['file']), path)
+        assert result['deletions_reapplied']['entries'] == 1 and result['deletions_reapplied']['accounts'] == 1
+        assert db_module.get_user_by_id(extra['id']) is None
+        assert [e['symptom_text'] for e in db_module.get_history(1)] == ['private symptoms']
+
+    def test_a_cleared_history_stays_cleared_after_a_restore(self, db_module, env):
+        path = self.populated(db_module)
+        m = backup.create_backup(path)
+        db_module.delete_history(1)
+        backup.restore_backup(str(env / 'backups' / m['file']), path)
+        assert db_module.get_history(1) == [] and db_module.get_user_by_id(1)
+
+    def test_the_deletion_log_holds_only_ids_and_times(self, db_module, env):
+        from quickaid.core import deletions, history_repo
+        i = db_module.save_symptom_analysis(1 if db_module.get_user_by_id(1) else db_module.create_user('x', 'x@example.com', 'password123')['id'], 'secret words', {})
+        uid = db_module.get_user_by_id(1)['id']
+        history_repo.delete_entry(uid, 'symptom', i)
+        text = deletions.log_path(db_module.DB_PATH).read_text()
+        assert 'secret words' not in text and oct(deletions.log_path(db_module.DB_PATH).stat().st_mode & 0o777) == '0o600'
+
+    def test_each_database_has_its_own_deletion_log(self, tmp_path):
+        from quickaid.core import deletions
+        assert deletions.log_path(str(tmp_path / 'a.db')) != deletions.log_path(str(tmp_path / 'b.db'))
 
     def test_restore_refuses_while_the_database_is_in_use(self, db_module, env):
         path = self.populated(db_module)

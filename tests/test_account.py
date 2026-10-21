@@ -133,7 +133,7 @@ class TestAccountSettings:
     def test_update_profile_duplicate_username_rejected(self, client, registered_user):
         client.post('/logout')
         client.post('/register', data={
-            'username': 'someoneelse', 'email': 'someoneelse@example.com', 'password': 'password12345', 'confirm_password': 'password12345'
+            'username': 'someoneelse', 'email': 'someoneelse@example.com', 'password': 'orange-kettle-42', 'confirm_password': 'orange-kettle-42'
         })
         client.post('/logout')
         client.post('/login', data=registered_user)
@@ -330,24 +330,44 @@ class TestGoogleOAuthCallbackLogic:
         assert user_row['has_password'] == 0
         assert user_row['email_verified'] == 1
 
-    def test_callback_links_to_existing_account_with_matching_email(self, temp_db_path, monkeypatch):
+    def _link_scenario(self, monkeypatch, temp_db_path, verify_first):
         client, oauth_module, db = self._build_client(monkeypatch, temp_db_path)
         client.post('/register', data={
-            'username': 'existinguser', 'email': 'existing@example.com', 'password': 'password12345', 'confirm_password': 'password12345'
+            'username': 'existinguser', 'email': 'existing@example.com', 'password': 'orange-kettle-42', 'confirm_password': 'orange-kettle-42'
         })
         client.post('/logout')
-
-        fake_token = {'userinfo': {
-            'sub': 'google-sub-2', 'email': 'existing@example.com', 'email_verified': True
-        }}
+        if verify_first:
+            db.set_email_verified(db.get_user_by_username('existinguser')['id'])
+        fake_token = {'userinfo': {'sub': 'google-sub-2', 'email': 'existing@example.com', 'email_verified': True}}
         monkeypatch.setattr(oauth_module.oauth.google, 'authorize_access_token', lambda: fake_token)
-
         resp = client.get('/login/google/callback')
         assert resp.status_code == 302
+        return client, db, db.get_user_by_oauth('google', 'google-sub-2')
 
-        linked = db.get_user_by_oauth('google', 'google-sub-2')
+    def test_callback_links_to_existing_VERIFIED_account_and_keeps_its_password(self, temp_db_path, monkeypatch):
+        client, db, linked = self._link_scenario(monkeypatch, temp_db_path, verify_first=True)
         assert linked['username'] == 'existinguser'
-        assert linked['has_password'] == 1  # existing password not wiped out by linking
+        assert linked['has_password'] == 1 and db.verify_password(linked, 'orange-kettle-42')
+
+    def test_claiming_an_UNVERIFIED_account_via_google_destroys_the_impostors_password(self, temp_db_path, monkeypatch):
+        """Pre-hijacking: an attacker registers victim@x with their own password; the real owner later signs in with Google."""
+        client, db, linked = self._link_scenario(monkeypatch, temp_db_path, verify_first=False)
+        assert linked['username'] == 'existinguser' and linked['email_verified'] == 1
+        assert linked['has_password'] == 0 and not db.verify_password(linked, 'orange-kettle-42')      # the attacker's password no longer works
+        attacker = client.application.test_client()
+        r = attacker.post('/login', data={'username': 'existinguser', 'password': 'orange-kettle-42'})
+        assert r.status_code == 401
+
+    def test_claiming_signs_out_sessions_the_attacker_already_had(self, temp_db_path, monkeypatch):
+        client, oauth_module, db = self._build_client(monkeypatch, temp_db_path)
+        attacker = client.application.test_client()
+        attacker.post('/register', data={'username': 'existinguser', 'email': 'victim@example.com', 'password': 'orange-kettle-42',
+                                         'confirm_password': 'orange-kettle-42'})
+        assert attacker.get('/api/history').status_code == 200                      # the attacker is signed in
+        monkeypatch.setattr(oauth_module.oauth.google, 'authorize_access_token',
+                            lambda: {'userinfo': {'sub': 'google-victim', 'email': 'victim@example.com', 'email_verified': True}})
+        client.get('/login/google/callback')                                       # the real owner arrives via Google
+        assert attacker.get('/api/history').status_code == 401                      # ...and the attacker's session is dead
 
     def test_callback_rejects_unverified_email(self, temp_db_path, monkeypatch):
         client, oauth_module, db = self._build_client(monkeypatch, temp_db_path)

@@ -167,7 +167,8 @@ class TestAnalysisScope:
         assert a['kind'] == 'chat' and a['mode'] == 'rules' and a['emergency'] and a['calls'] == 0
         s.client.models.generate_content.assert_not_called()
 
-    def test_image_and_interview_calls_are_instrumented(self, tmp_path):
+    def test_image_and_interview_calls_are_instrumented(self, tmp_path, monkeypatch):
+        monkeypatch.setenv('INTERVIEW_AI_PLAN', 'true')
         import numpy as np
         from PIL import Image
         from quickaid.ai.interview import InterviewEngine

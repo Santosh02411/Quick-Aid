@@ -7,6 +7,9 @@ and can't interfere with each other or a running dev server.
 """
 
 import os
+
+# Most tests exercise analysis with mocked AI and no signed-in consent. The consent behaviour has its own tests, which turn this back on.
+os.environ.setdefault('REQUIRE_AI_CONSENT', 'false')
 import sys
 import tempfile
 import pytest

@@ -318,6 +318,10 @@ class TestAssessment:
 
 
 class TestInterviewWithGemini:
+    @pytest.fixture(autouse=True)
+    def _ai_planning_on(self, monkeypatch):
+        monkeypatch.setenv('INTERVIEW_AI_PLAN', 'true')          # model-tailored questions are opt-in (the question bank is instant)
+
     def _engine(self, plan_json, assess_json):
         e = InterviewEngine()
         e.checker.use_gemini = True
