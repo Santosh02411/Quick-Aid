@@ -60,11 +60,22 @@ bumps `AI_CONSENT_VERSION` so everyone who agreed is asked again.
 
 ## Known limitations (please read)
 
-* **The translated emergency text has not been reviewed by clinicians.** See [TRANSLATION_REVIEW.md](TRANSLATION_REVIEW.md). Until it is, the app says so on screen.
-* **Without an AI key the rules are a floor, not a safety net.** Measured on fresh phrasing the English keyword rules found only about a third of emergencies; the Hindi, Marathi and Kannada
-  rules are new and have been tested only against examples written by their authors.
+* **The translated emergency text has not been reviewed by clinicians.** See [TRANSLATION_REVIEW.md](TRANSLATION_REVIEW.md) for what *has* been
+  done (an AI linguistic pass, explicitly not a substitute for that review) and what it found. Until clinician review happens, the app says so on screen.
+* **Without an AI key the rules are a floor, not a safety net, and this has been measured more than once, not assumed.** Three successive fresh
+  (unseen) sets of general emergency phrasing each found real gaps, each was then fixed, and each now scores 100% recall - see `HOLDOUT_FIRST_RUN.md`
+  through `HOLDOUT3_RESULT.md` in `evaluation/`. A **fourth** fresh set, targeting children, pregnancy and older adults specifically (several cases
+  grounded in WHO/NHS published danger-sign criteria), was deliberately **left unfixed** and currently scores only 22.2% recall
+  (`HOLDOUT4_RESULT.md`) - the vocabulary for these categories has simply not been built yet. Treat the rules as weakest exactly there until that
+  work happens.
 * **Wording checks (softening "you definitely have…", removing doses) work on English text only.** For other languages the structured fields (urgency, emergency flag) are still
   enforced, but free-text phrasing is not rewritten.
+* **Image analysis has only ever been validated as photo-usability screening, not as medical interpretation.** The automatic quality gate (blur,
+  darkness, contrast, resolution) has been tested across a realistic range of synthetic skin tones, which found and partly fixed a real fairness
+  problem (darker skin tones were flagged "too dark"/"low contrast" far more readily under identical lighting - see `quickaid/ai/image_quality.py`
+  and `tests/test_image_quality_fairness.py` for the mechanism and what remains an open, structural limitation). **Whether the AI correctly
+  identifies what a wound or rash actually is has no real, independently-labelled photo set to measure against** - see
+  `evaluation/reference/README.md`. Never describe this app's image analysis as validated injury or disease detection.
 * **Signing in with Google skips this app's own 2FA**, by design (Google's own protections apply). Turn that off by not configuring Google sign-in.
 * **Rate-limit counters are per process** unless `RATELIMIT_STORAGE_URI` points at Redis. With several workers or instances, use Redis.
 * **SQLite is one file on one host.** Backups are verified snapshots; see [OPERATIONS.md](OPERATIONS.md). A deletion also stays in older *backups* until they rotate out.
