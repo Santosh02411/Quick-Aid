@@ -19,7 +19,6 @@ renumber, and add a test. Command line:  python -m quickaid.core.migrations stat
 import hashlib
 import inspect
 import json
-import os
 import sqlite3
 import sys
 import time
@@ -156,12 +155,12 @@ def m003_encrypt_legacy_history_columns(conn: sqlite3.Connection) -> None:
     `emergency_alert` flag on photo analyses from the stored full analysis.
     """
     for table, cols in _LEGACY_COLUMNS.items():
-        rows = conn.execute(f'SELECT id, {", ".join(cols)} FROM {table}').fetchall()
+        rows = conn.execute(f'SELECT id, {", ".join(cols)} FROM {table}').fetchall()  # nosec B608: identifiers come from a fixed allow-list in this module; every value is a bound parameter
         for row in rows:
             updates = {c: crypto.encrypt(row[c]) for c in cols if row[c] and not str(row[c]).startswith(ENC_PREFIX)}
             if updates:
                 sets = ', '.join(f'{c} = ?' for c in updates)
-                conn.execute(f'UPDATE {table} SET {sets} WHERE id = ?', (*updates.values(), row['id']))
+                conn.execute(f'UPDATE {table} SET {sets} WHERE id = ?', (*updates.values(), row['id']))  # nosec B608: identifiers come from a fixed allow-list in this module; every value is a bound parameter
     for row in conn.execute('SELECT id, analysis_json FROM image_analyses WHERE analysis_json IS NOT NULL').fetchall():
         try:
             full = json.loads(crypto.decrypt(row['analysis_json']))
@@ -201,12 +200,44 @@ def m005_retention_and_maintenance(conn: sqlite3.Connection) -> None:
     """)
 
 
+# ---------------------------------------------------------------------------
+# 6. Security: session versions, 2FA recovery + replay protection, attempts, security events, language, AI consent
+# ---------------------------------------------------------------------------
+
+def m006_security_hardening(conn: sqlite3.Connection) -> None:
+    _add_column(conn, 'users', 'session_version', 'INTEGER NOT NULL DEFAULT 0')    # bump = every signed-in session becomes invalid
+    _add_column(conn, 'users', 'totp_last_step', 'INTEGER')                          # a 2FA code can be used for login only once
+    _add_column(conn, 'users', 'password_changed_at', 'TEXT')
+    _add_column(conn, 'users', 'language', 'TEXT')
+    _add_column(conn, 'users', 'ai_consent_version', 'INTEGER')                      # which wording of the external-AI notice they agreed to
+    _add_column(conn, 'users', 'ai_consent_at', 'TEXT')
+    _script(conn, """
+        CREATE TABLE IF NOT EXISTS recovery_codes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            code_hash TEXT NOT NULL, created_at TEXT NOT NULL, used_at TEXT);
+        CREATE INDEX IF NOT EXISTS idx_recovery_user ON recovery_codes(user_id, used_at);
+        CREATE TABLE IF NOT EXISTS auth_attempts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT, scope TEXT NOT NULL, key TEXT NOT NULL, created_at TEXT NOT NULL);
+        CREATE INDEX IF NOT EXISTS idx_attempts_lookup ON auth_attempts(scope, key, created_at);
+        CREATE TABLE IF NOT EXISTS security_events (
+            id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+            event TEXT NOT NULL, detail TEXT, network TEXT, created_at TEXT NOT NULL);
+        CREATE INDEX IF NOT EXISTS idx_security_user ON security_events(user_id, created_at);
+        CREATE INDEX IF NOT EXISTS idx_security_created ON security_events(created_at)
+    """)
+    # 2FA secrets were stored readable: a database copy or a backup would have let someone clone every user's authenticator.
+    for row in conn.execute('SELECT id, totp_secret FROM users WHERE totp_secret IS NOT NULL').fetchall():
+        if row['totp_secret'] and not str(row['totp_secret']).startswith(ENC_PREFIX):
+            conn.execute('UPDATE users SET totp_secret = ? WHERE id = ?', (crypto.encrypt(row['totp_secret']), row['id']))
+
+
 MIGRATIONS: List[Migration] = [
     Migration(1, 'baseline', m001_baseline),
     Migration(2, 'history_notes_and_flags', m002_history_notes_and_flags),
     Migration(3, 'encrypt_legacy_history_columns', m003_encrypt_legacy_history_columns),
     Migration(4, 'history_and_maintenance_indexes', m004_history_and_maintenance_indexes),
     Migration(5, 'retention_and_maintenance', m005_retention_and_maintenance),
+    Migration(6, 'security_hardening', m006_security_hardening),
 ]
 LATEST_VERSION = MIGRATIONS[-1].version
 

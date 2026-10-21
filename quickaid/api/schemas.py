@@ -64,6 +64,14 @@ class RetentionBody(BaseModel):
     days: Optional[Literal[0, 30, 90, 365]] = Field(None, description='0 = keep until I delete. null = use the system default.')
 
 
+class AiConsentBody(BaseModel):
+    granted: bool = Field(..., description='true = I agree my text and photos may be sent to the AI provider; false = withdraw (basic mode only)')
+
+
+class LanguageBody(BaseModel):
+    language: Literal['en', 'hi', 'mr', 'kn'] = Field(..., description='en, hi (Hindi), mr (Marathi) or kn (Kannada)')
+
+
 class ConversationQuery(BaseModel):
     q: str = Field('', max_length=100)
     page: int = Field(1, ge=1)

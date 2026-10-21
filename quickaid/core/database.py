@@ -8,6 +8,7 @@ for the AI-analysis features.
 
 import sqlite3
 import json
+import re
 import os
 import hashlib
 import secrets
@@ -39,6 +40,7 @@ def _connect() -> sqlite3.Connection:
     conn.execute("PRAGMA foreign_keys = ON")
     conn.execute("PRAGMA busy_timeout = 30000")        # wait for a concurrent writer instead of failing instantly
     conn.execute("PRAGMA synchronous = NORMAL")         # safe with WAL, much faster than FULL
+    conn.execute("PRAGMA secure_delete = ON")           # deleted rows are overwritten with zeros, not just unlinked
     return conn
 
 
@@ -105,23 +107,44 @@ def create_user(username: str, email: str, password: str) -> Optional[Dict]:
                 (username, email, password_hash, _now())
             )
             user_id = cursor.lastrowid
-        logger.info("Created new user id=%s username=%s", user_id, username)
+        logger.info("Created new user id=%s", user_id)
         return get_user_by_id(user_id)
     except sqlite3.IntegrityError:
-        logger.warning("User creation failed - username or email already taken: %s / %s", username, email)
+        logger.warning("User creation failed - username or email already taken")
         return None
+
+
+def _user_dict(row) -> Optional[Dict]:
+    """A user row as a dict, with the 2FA secret decrypted (it is encrypted at rest)."""
+    if not row:
+        return None
+    d = dict(row)
+    if d.get('totp_secret'):
+        d['totp_secret'] = crypto.decrypt(d['totp_secret'])
+    return d
 
 
 def get_user_by_id(user_id: int) -> Optional[Dict]:
     with get_connection() as conn:
         row = conn.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
-    return dict(row) if row else None
+    return _user_dict(row)
 
 
 def get_user_by_username(username: str) -> Optional[Dict]:
     with get_connection() as conn:
         row = conn.execute("SELECT * FROM users WHERE username = ?", (username,)).fetchone()
-    return dict(row) if row else None
+    return _user_dict(row)
+
+
+_DUMMY_HASH = None
+
+
+def burn_password_check(password: str) -> None:
+    """Spend the same time a real password check would, for usernames that do not exist (so response time does not reveal them)."""
+    global _DUMMY_HASH
+    if _DUMMY_HASH is None:
+        _DUMMY_HASH = generate_password_hash('quickaid-timing-equaliser')
+    check_password_hash(_DUMMY_HASH, password)
 
 
 def verify_password(user: Dict, password: str) -> bool:
@@ -133,7 +156,7 @@ def verify_password(user: Dict, password: str) -> bool:
 def get_user_by_email(email: str) -> Optional[Dict]:
     with get_connection() as conn:
         row = conn.execute("SELECT * FROM users WHERE email = ?", (email,)).fetchone()
-    return dict(row) if row else None
+    return _user_dict(row)
 
 
 def username_taken(username: str, exclude_user_id: Optional[int] = None) -> bool:
@@ -159,7 +182,7 @@ def update_username(user_id: int, new_username: str) -> bool:
     try:
         with get_connection() as conn:
             conn.execute("UPDATE users SET username = ? WHERE id = ?", (new_username, user_id))
-        logger.info("Username updated for user_id=%s -> %s", user_id, new_username)
+        logger.info("Username updated for user_id=%s", user_id)
         return True
     except sqlite3.IntegrityError:
         return False
@@ -186,8 +209,8 @@ def set_password(user_id: int, new_password: str) -> None:
     password_hash = generate_password_hash(new_password)
     with get_connection() as conn:
         conn.execute(
-            "UPDATE users SET password_hash = ?, has_password = 1 WHERE id = ?",
-            (password_hash, user_id)
+            "UPDATE users SET password_hash = ?, has_password = 1, password_changed_at = ?, session_version = session_version + 1 WHERE id = ?",
+            (password_hash, _now(), user_id)
         )
     logger.info("Password set/changed for user_id=%s", user_id)
 
@@ -201,8 +224,11 @@ def set_email_verified(user_id: int) -> None:
 def delete_user(user_id: int) -> None:
     """Permanently delete a user and everything owned by them (history,
     tokens - all via ON DELETE CASCADE). Irreversible."""
+    from quickaid.core import deletions
     with get_connection() as conn:
         conn.execute("DELETE FROM users WHERE id = ?", (user_id,))
+    deletions.record('account', user_id=user_id)      # so restoring an older backup cannot bring this person back
+    scrub(vacuum=True)
     logger.info("Deleted user_id=%s and all owned data", user_id)
 
 
@@ -211,27 +237,24 @@ def delete_user(user_id: int) -> None:
 # ---------------------------------------------------------------------------
 
 def set_pending_totp_secret(user_id: int, secret: str) -> None:
-    """Store a not-yet-confirmed TOTP secret (totp_enabled stays 0 until
-    the user proves they can generate a valid code for it)."""
+    """Store a not-yet-confirmed TOTP secret (encrypted at rest; totp_enabled stays 0 until confirmed)."""
     with get_connection() as conn:
-        conn.execute(
-            "UPDATE users SET totp_secret = ?, totp_enabled = 0 WHERE id = ?",
-            (secret, user_id)
-        )
+        conn.execute("UPDATE users SET totp_secret = ?, totp_enabled = 0 WHERE id = ?", (crypto.encrypt(secret), user_id))
 
 
 def enable_totp(user_id: int) -> None:
     with get_connection() as conn:
-        conn.execute("UPDATE users SET totp_enabled = 1 WHERE id = ?", (user_id,))
+        conn.execute("UPDATE users SET totp_enabled = 1, totp_last_step = NULL, session_version = session_version + 1 WHERE id = ?", (user_id,))
     logger.info("2FA enabled for user_id=%s", user_id)
 
 
 def disable_totp(user_id: int) -> None:
     with get_connection() as conn:
         conn.execute(
-            "UPDATE users SET totp_enabled = 0, totp_secret = NULL WHERE id = ?",
+            "UPDATE users SET totp_enabled = 0, totp_secret = NULL, totp_last_step = NULL, session_version = session_version + 1 WHERE id = ?",
             (user_id,)
         )
+        conn.execute("DELETE FROM recovery_codes WHERE user_id = ?", (user_id,))
     logger.info("2FA disabled for user_id=%s", user_id)
 
 
@@ -332,6 +355,22 @@ def get_valid_token(raw_token: str, purpose: str) -> Optional[Dict]:
     if datetime.fromisoformat(token['expires_at']) < datetime.now(timezone.utc):
         return None
     return token
+
+
+def invalidate_user_tokens(user_id: int, purpose: str) -> None:
+    """Make every outstanding link of this kind unusable (after a reset completes, old reset emails must stop working)."""
+    with get_connection() as conn:
+        conn.execute("UPDATE user_tokens SET used_at = ? WHERE user_id = ? AND purpose = ? AND used_at IS NULL", (_now(), user_id, purpose))
+
+
+def neutralise_unverified_account(user_id: int) -> None:
+    """A local account whose email was never verified is being claimed by the real owner via Google. Whoever registered it first may
+    be an impostor who knows its password, so the password is destroyed, every session and link is revoked, and the email is now verified."""
+    with get_connection() as conn:
+        conn.execute("UPDATE users SET password_hash = ?, has_password = 0, email_verified = 1, session_version = session_version + 1, "
+                     "totp_enabled = 0, totp_secret = NULL WHERE id = ?", (generate_password_hash(secrets.token_urlsafe(32)), user_id))
+        conn.execute("UPDATE user_tokens SET used_at = ? WHERE user_id = ? AND used_at IS NULL", (_now(), user_id))
+        conn.execute("DELETE FROM recovery_codes WHERE user_id = ?", (user_id,))
 
 
 def consume_token(token_id: int) -> None:
@@ -454,6 +493,9 @@ def delete_history(user_id: int) -> None:
         conn.execute("DELETE FROM image_analyses WHERE user_id = ?", (user_id,))
         conn.execute("DELETE FROM symptom_analyses WHERE user_id = ?", (user_id,))
         conn.execute("DELETE FROM symptom_interviews WHERE user_id = ?", (user_id,))
+    from quickaid.core import deletions
+    deletions.record('history', user_id=user_id)
+    scrub(vacuum=True)
     logger.info("Cleared history for user_id=%s", user_id)
 
 
@@ -473,7 +515,7 @@ def get_analysis(user_id: int, analysis_type: str, analysis_id: int) -> Optional
     if not table:
         return None
     with get_connection() as conn:
-        row = conn.execute(f"SELECT * FROM {table} WHERE id = ? AND user_id = ?", (analysis_id, user_id)).fetchone()
+        row = conn.execute(f"SELECT * FROM {table} WHERE id = ? AND user_id = ?", (analysis_id, user_id)).fetchone()  # nosec B608: identifiers come from a fixed allow-list in this module; every value is a bound parameter
     if not row:
         return None
     entry = _row_to_image_dict(row) if analysis_type == 'image' else _row_to_symptom_dict(row)
@@ -718,3 +760,119 @@ def purge_telemetry(days: int) -> int:
         a = conn.execute("DELETE FROM ai_calls WHERE ts < ?", (cutoff,)).rowcount
         b = conn.execute("DELETE FROM ai_analyses WHERE ts < ?", (cutoff,)).rowcount
     return a + b
+
+
+# ---------------------------------------------------------------------------
+# Secure deletion
+# ---------------------------------------------------------------------------
+
+def scrub(vacuum: bool = False) -> None:
+    """Make deletions physical. `secure_delete` already zeroes freed content inside the database; this also truncates the write-ahead
+    log (which can still hold the old rows) and, with vacuum=True, rewrites the file so no freed pages remain. Never raises."""
+    try:
+        conn = sqlite3.connect(DB_PATH, timeout=30, isolation_level=None)
+        try:
+            conn.execute("PRAGMA secure_delete = ON")
+            conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+            if vacuum:
+                conn.execute("VACUUM")
+        finally:
+            conn.close()
+    except sqlite3.Error:
+        logger.warning("Could not scrub the database after a deletion", exc_info=True)
+
+
+# ---------------------------------------------------------------------------
+# Sessions, 2FA recovery, attempt tracking, security events, language, AI consent
+# ---------------------------------------------------------------------------
+
+def bump_session_version(user_id: int) -> int:
+    """Invalidate every signed-in session of this user (all devices). Returns the new version."""
+    with get_connection() as conn:
+        conn.execute("UPDATE users SET session_version = session_version + 1 WHERE id = ?", (user_id,))
+        return conn.execute("SELECT session_version FROM users WHERE id = ?", (user_id,)).fetchone()[0]
+
+
+def claim_totp_step(user_id: int, step: int) -> bool:
+    """Accept a 2FA time-step once only (a captured code cannot be replayed within its validity window)."""
+    with get_connection() as conn:
+        cur = conn.execute("UPDATE users SET totp_last_step = ? WHERE id = ? AND (totp_last_step IS NULL OR totp_last_step < ?)", (step, user_id, step))
+        return cur.rowcount == 1
+
+
+def _hash_code(code: str) -> str:
+    return hashlib.sha256(re.sub(r'[^A-Z0-9]', '', code.upper()).encode('utf-8')).hexdigest()
+
+
+def create_recovery_codes(user_id: int, count: int = 10) -> List[str]:
+    """Replace this user's recovery codes with `count` fresh single-use ones. Only hashes are stored: the plain codes are returned ONCE."""
+    alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'          # no 0/O/1/I: they get misread when copied by hand
+    codes = [''.join(secrets.choice(alphabet) for _ in range(5)) + '-' + ''.join(secrets.choice(alphabet) for _ in range(5)) for _ in range(count)]
+    with transaction() as conn:
+        conn.execute("DELETE FROM recovery_codes WHERE user_id = ?", (user_id,))
+        conn.executemany("INSERT INTO recovery_codes (user_id, code_hash, created_at) VALUES (?, ?, ?)", [(user_id, _hash_code(c), _now()) for c in codes])
+    return codes
+
+
+def consume_recovery_code(user_id: int, code: str) -> bool:
+    """Use up one recovery code (atomically: two simultaneous tries cannot both succeed)."""
+    if not code or len(re.sub(r'[^A-Za-z0-9]', '', code)) != 10:
+        return False
+    with get_connection() as conn:
+        cur = conn.execute("UPDATE recovery_codes SET used_at = ? WHERE user_id = ? AND code_hash = ? AND used_at IS NULL", (_now(), user_id, _hash_code(code)))
+        return cur.rowcount == 1
+
+
+def recovery_codes_remaining(user_id: int) -> int:
+    with get_connection() as conn:
+        return conn.execute("SELECT COUNT(*) FROM recovery_codes WHERE user_id = ? AND used_at IS NULL", (user_id,)).fetchone()[0]
+
+
+def record_attempt(scope: str, key: str) -> None:
+    with get_connection() as conn:
+        conn.execute("INSERT INTO auth_attempts (scope, key, created_at) VALUES (?, ?, ?)", (scope, key, _now()))
+
+
+def count_attempts(scope: str, key: str, window_seconds: int) -> int:
+    since = (datetime.now(timezone.utc) - timedelta(seconds=window_seconds)).isoformat()
+    with get_connection() as conn:
+        return conn.execute("SELECT COUNT(*) FROM auth_attempts WHERE scope = ? AND key = ? AND created_at >= ?", (scope, key, since)).fetchone()[0]
+
+
+def clear_attempts(scope: str, key: str) -> None:
+    with get_connection() as conn:
+        conn.execute("DELETE FROM auth_attempts WHERE scope = ? AND key = ?", (scope, key))
+
+
+def add_security_event(user_id: Optional[int], event: str, detail: str = '', network: str = '') -> None:
+    with get_connection() as conn:
+        conn.execute("INSERT INTO security_events (user_id, event, detail, network, created_at) VALUES (?, ?, ?, ?, ?)",
+                     (user_id, event, detail[:200], network[:64], _now()))
+
+
+def list_security_events(user_id: int, limit: int = 15) -> List[Dict]:
+    with get_connection() as conn:
+        rows = conn.execute("SELECT event, detail, network, created_at FROM security_events WHERE user_id = ? ORDER BY id DESC LIMIT ?", (user_id, limit)).fetchall()
+    return [dict(r) for r in rows]
+
+
+def purge_security_data(days: int = 180) -> int:
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+    attempts_cutoff = (datetime.now(timezone.utc) - timedelta(days=1)).isoformat()
+    with get_connection() as conn:
+        a = conn.execute("DELETE FROM security_events WHERE created_at < ?", (cutoff,)).rowcount
+        b = conn.execute("DELETE FROM auth_attempts WHERE created_at < ?", (attempts_cutoff,)).rowcount
+        c = conn.execute("DELETE FROM recovery_codes WHERE used_at IS NOT NULL AND used_at < ?", (cutoff,)).rowcount
+    return a + b + c
+
+
+def set_user_language(user_id: int, language: Optional[str]) -> None:
+    with get_connection() as conn:
+        conn.execute("UPDATE users SET language = ? WHERE id = ?", (language, user_id))
+
+
+def set_ai_consent(user_id: int, version: Optional[int]) -> None:
+    """Record the person's choice about sending text/photos to the external AI provider: the wording version they agreed to, 0 = they said no (remembered,
+    so they are not asked again), None = never asked."""
+    with get_connection() as conn:
+        conn.execute("UPDATE users SET ai_consent_version = ?, ai_consent_at = ? WHERE id = ?", (version, _now() if version is not None else None, user_id))

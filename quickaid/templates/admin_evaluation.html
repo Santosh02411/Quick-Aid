@@ -33,7 +33,7 @@
   <section class="panel" aria-labelledby="runs-h">
     <h2 id="runs-h">Versioned runs</h2>
     <p class="hint">Every run records its model, prompt fingerprint, safety-engine version and dataset versions. Pick a baseline (A) and a candidate (B) to compare.</p>
-    <div class="table-wrap"><table class="tbl" id="runsTable"></table></div>
+    <div class="table-wrap" tabindex="0" role="region" aria-label="{{ t('a11y.table') }}"><table class="tbl" id="runsTable"></table></div>
     <div class="actions"><button type="button" class="btn btn-sm" id="compareBtn">Compare A and B</button><span class="hint" id="compareHint"></span></div>
     <div id="compareOut"></div>
   </section>
@@ -51,7 +51,7 @@
 
   <section class="panel" aria-labelledby="ds-h">
     <h2 id="ds-h">Datasets and reference data</h2>
-    <div class="table-wrap"><table class="tbl" id="dsTable"></table></div>
+    <div class="table-wrap" tabindex="0" role="region" aria-label="{{ t('a11y.table') }}"><table class="tbl" id="dsTable"></table></div>
     <div id="imgRef"></div>
   </section>
 

@@ -27,7 +27,7 @@ class User(UserMixin):
         return bool(self.username) and self.username.lower() in names
 
     def __init__(self, id, username, email, email_verified=False, has_password=True,
-                 totp_enabled=False, oauth_provider=None, region=None):
+                 totp_enabled=False, oauth_provider=None, region=None, language=None, ai_consent_version=None):
         # Flask-Login expects get_id() to return a string.
         self.id = str(id)
         self.username = username
@@ -37,6 +37,8 @@ class User(UserMixin):
         self.totp_enabled = bool(totp_enabled)
         self.oauth_provider = oauth_provider
         self.region = region
+        self.language = language
+        self.ai_consent_version = ai_consent_version
 
     @staticmethod
     def from_row(row):
@@ -49,6 +51,8 @@ class User(UserMixin):
             totp_enabled=row.get('totp_enabled', 0) if isinstance(row, dict) else row['totp_enabled'],
             oauth_provider=row.get('oauth_provider') if isinstance(row, dict) else row['oauth_provider'],
             region=(row.get('region') if isinstance(row, dict) else row['region']) if ('region' in (row if isinstance(row, dict) else row.keys())) else None,
+            language=row.get('language') if isinstance(row, dict) else (row['language'] if 'language' in row.keys() else None),
+            ai_consent_version=row.get('ai_consent_version') if isinstance(row, dict) else (row['ai_consent_version'] if 'ai_consent_version' in row.keys() else None),
         )
 
 
@@ -58,6 +62,13 @@ def load_user(user_id: str):
         row = db.get_user_by_id(int(user_id))
     except (TypeError, ValueError):
         return None
+    if not row:
+        return None
+    from flask import has_request_context, session
+    if has_request_context():
+        sv = session.get('sv')
+        if sv is not None and sv != row.get('session_version', 0):
+            return None          # the password, 2FA or "sign out everywhere" changed since this session began: it is no longer valid
     return User.from_row(row)
 
 

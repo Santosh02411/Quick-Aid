@@ -10,29 +10,43 @@
   <div class="greeting">
     <div>
       <h1><span id="greet" data-name="{{ current_user.username }}">Welcome back</span>, {{ current_user.username }}</h1>
-      <p>Check an injury or describe how you feel. Results take a few seconds.</p>
+      <p>{{ t('dash.tagline') }}</p>
     </div>
-    <a class="btn btn-ghost" href="/chat">{{ icon('chat') }}Ask a follow-up question</a>
+    <a class="btn btn-ghost" href="/chat">{{ icon('chat') }}{{ t('js.followup') }}</a>
   </div>
 
   <div class="sos-strip" role="note">
     {{ icon('alert') }}
-    <span><strong>In an emergency, call {{ emergency_number }} first.</strong> Quick Aid is for guidance, not for emergencies.</span>
-    <a class="btn btn-danger btn-sm" href="tel:{{ emergency_number }}">{{ icon('phone') }}Call {{ emergency_number }}</a>
+    <span><strong>{{ t('dash.sos_line', number=emergency_number) }}</strong> {{ t('dash.sos_sub') }}</span>
+    <a class="btn btn-danger btn-sm" href="tel:{{ emergency_number }}">{{ icon('phone') }}{{ t('dash.call', number=emergency_number) }}</a>
   </div>
 
+  {% if ai_consent_needed %}
+  <section class="panel consent-card" id="aiConsentCard" aria-labelledby="consent-h">
+    <h2 id="consent-h">{{ t('consent.title') }}</h2>
+    <p>{{ t('consent.p1') }}</p>
+    <p>{{ t('consent.p2', number=emergency_number) }}</p>
+    <div class="actions">
+      <button type="button" class="btn" data-ai-consent="true">{{ t('consent.allow') }}</button>
+      <button type="button" class="btn btn-ghost" data-ai-consent="false">{{ t('consent.keep_off') }}</button>
+      <a class="btn btn-ghost" href="/privacy#ai">{{ t('consent.details') }}</a>
+    </div>
+    <div class="match-msg" id="aiConsentMsg" aria-live="polite"></div>
+  </section>
+  {% endif %}
+
   <section class="stats" aria-label="Your activity">
-    <div class="stat"><div class="num" id="statTotal">{{ stats.total }}</div><div class="lbl">Checks done</div></div>
-    <div class="stat"><div class="num" id="statImages">{{ stats.images }}</div><div class="lbl">Photo checks</div></div>
-    <div class="stat"><div class="num" id="statSymptoms">{{ stats.symptoms }}</div><div class="lbl">Symptom checks</div></div>
-    <div class="stat {% if stats.urgent %}stat-alert{% endif %}"><div class="num" id="statUrgent">{{ stats.urgent }}</div><div class="lbl">Flagged as urgent</div></div>
+    <div class="stat"><div class="num" id="statTotal">{{ stats.total }}</div><div class="lbl">{{ t('dash.stat_total') }}</div></div>
+    <div class="stat"><div class="num" id="statImages">{{ stats.images }}</div><div class="lbl">{{ t('dash.stat_images') }}</div></div>
+    <div class="stat"><div class="num" id="statSymptoms">{{ stats.symptoms }}</div><div class="lbl">{{ t('dash.stat_symptoms') }}</div></div>
+    <div class="stat {% if stats.urgent %}stat-alert{% endif %}"><div class="num" id="statUrgent">{{ stats.urgent }}</div><div class="lbl">{{ t('dash.stat_urgent') }}</div></div>
   </section>
 
   <div class="tools">
     <section class="panel" id="image" aria-labelledby="image-h">
       <div class="panel-head">
         <span class="panel-icon">{{ icon('camera') }}</span>
-        <h2 id="image-h">Check an injury or skin problem</h2>
+        <h2 id="image-h">{{ t('dash.image_title') }}</h2>
       </div>
 
       {% if not ai_connected %}
@@ -40,14 +54,14 @@
       {% endif %}
 
       <div id="uploader">
-        <div class="dropzone" id="dropzone" role="button" tabindex="0" aria-label="Drop a photo here, or press Enter to choose one" aria-describedby="uploadStatus">
+        <div class="dropzone" id="dropzone" role="button" tabindex="0" aria-describedby="uploadStatus">
           {{ icon('upload') }}
           <p><strong>Drop a photo here</strong> or paste one</p>
           <p class="hint">JPG, PNG, WebP, GIF or BMP, up to 16 MB</p>
         </div>
         <div class="upload-buttons">
-          <button type="button" class="btn btn-ghost" id="chooseBtn">{{ icon('upload') }}Choose a photo</button>
-          <button type="button" class="btn btn-ghost" id="cameraBtn">{{ icon('camera') }}Take a photo</button>
+          <button type="button" class="btn btn-ghost" id="chooseBtn">{{ icon('upload') }}{{ t('dash.choose_photo') }}</button>
+          <button type="button" class="btn btn-ghost" id="cameraBtn">{{ icon('camera') }}{{ t('dash.take_photo') }}</button>
         </div>
         <input type="file" id="imageInput" accept="image/png,image/jpeg,image/gif,image/bmp,image/webp" hidden>
         <input type="file" id="captureInput" accept="image/*" capture="environment" hidden>
@@ -79,7 +93,7 @@
         </ul>
       </details>
 
-      <div class="actions"><button type="button" class="btn" id="analyzeBtn" disabled>{{ icon('shield') }}Analyze photo</button></div>
+      <div class="actions"><button type="button" class="btn" id="analyzeBtn" disabled>{{ icon('shield') }}{{ t('dash.analyze_photo') }}</button></div>
       <div class="loading" id="imageLoading" role="status"><span class="spinner"></span>Checking the photo and analysing it…</div>
       <div class="result" id="imageResult" aria-live="polite"></div>
     </section>

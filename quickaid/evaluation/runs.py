@@ -35,7 +35,7 @@ METRIC_LABELS = {
 
 def new_run_id(mode: str) -> str:
     safe = re.sub(r'[^A-Za-z0-9]+', '-', mode).strip('-')[:20] or 'run'
-    return f"{datetime.now(timezone.utc).strftime('%Y%m%d-%H%M%S')}-{safe}-{secrets.token_hex(2)}"
+    return f"{datetime.now(timezone.utc).strftime('%Y%m%d-%H%M%S')}-{safe}-{secrets.token_hex(4)}"
 
 
 def save_run(record: Dict) -> str:

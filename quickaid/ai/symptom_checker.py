@@ -22,7 +22,8 @@ from typing import Dict, List
 from google import genai
 from google.genai import types
 
-from quickaid.ai import telemetry, triage_engine
+from quickaid.i18n import prompts as language_prompts
+from quickaid.ai import model_calls, consent, first_aid, telemetry, triage_engine
 from quickaid.ai.schemas import SymptomAssessment, validate_response
 from quickaid.ai.triage_engine import (  # noqa: F401  (re-exported: other modules and tests import these from here)
     CRISIS_SUPPORT, EMERGENCY_ACTION, EMERGENCY_MESSAGE, engine as triage, negated as _negated, scan_red_flags,
@@ -243,7 +244,7 @@ class SymptomChecker:
     def analyze_symptoms(self, symptom_text: str) -> Dict:
         """Analyze symptoms and provide recommendations."""
         try:
-            if self.use_gemini:
+            if self.use_gemini and consent.external_allowed():
                 return self._analyze_with_gemini(symptom_text)
             return self._analyze_basic_symptoms(symptom_text)
         except Exception as e:
@@ -263,6 +264,7 @@ class SymptomChecker:
             f'Symptom description from the user:\n"""\n{symptom_text}\n"""'
         )
         last_error = None
+        budget = model_calls.Budget()
         for attempt in (1, 2):
             try:
                 with telemetry.call('symptom', self.MODEL_NAME, 'symptom') as tcall:
@@ -270,10 +272,11 @@ class SymptomChecker:
                         model=self.MODEL_NAME,
                         contents=contents,
                         config=types.GenerateContentConfig(
-                            system_instruction=SYSTEM_INSTRUCTION,
+                            system_instruction=SYSTEM_INSTRUCTION + language_prompts.note(),
                             response_mime_type='application/json',
                             response_schema=SymptomAnalysisResult,
                             temperature=0.2,
+                            **model_calls.speed_kwargs(self.MODEL_NAME),
                         ),
                     )
                     tcall.api_done(response)
@@ -285,8 +288,10 @@ class SymptomChecker:
             except Exception as e:
                 last_error = e
                 logger.warning("Gemini symptom call attempt %d failed: %s", attempt, e)
-                if attempt == 1:
+                if attempt == 1 and budget.allows_retry(e, self.MODEL_NAME):
                     time.sleep(1.0)
+                else:
+                    break
 
         logger.warning("Gemini symptom analysis failed - falling back to basic analysis", exc_info=last_error)
         return self._analyze_basic_symptoms(symptom_text)
@@ -363,17 +368,21 @@ class SymptomChecker:
         flags = scan_red_flags(symptom_text)
         soon = triage_engine.scan(symptom_text).soon
 
-        if not symptoms and not (flags['emergency'] or flags['urgent'] or flags['crisis'] or soon):
+        guides = first_aid.match(symptom_text)
+        if not symptoms and not guides and not (flags['emergency'] or flags['urgent'] or flags['crisis'] or soon):
             return {
                 'error': 'No recognizable symptoms found',
-                'recommendations': ['Please describe your symptoms more specifically',
+                'recommendations': ['Please describe what is wrong a little more: what it is, where on the body, and how long it has been going on',
                                     localize_text('This basic check cannot recognise every description or language. If this might be an emergency, call {EMERGENCY_NUMBER} now.', region),
                                     'If you are worried, see a doctor rather than waiting'],
                 'disclaimer': DISCLAIMER_BASIC
             }
 
-        analysis = self._analyze_symptom_combination(symptoms)
-        recommendations = self._generate_symptom_recommendations(analysis)
+        if symptoms:
+            analysis = self._analyze_symptom_combination(symptoms)
+            recommendations = self._generate_symptom_recommendations(analysis)
+        else:                                                     # an injury or a warning sign only: the first-aid guides below supply the advice
+            analysis, recommendations = {'conditions': [], 'urgency': 'low'}, []
         emergency_check = self._check_emergency_symptoms(symptoms)
         emergency_check.setdefault('reason', '')
         if emergency_check.get('alert'):
@@ -396,10 +405,15 @@ class SymptomChecker:
                 if w not in warn:
                     warn.append(w)
 
+        shown = [str(s).replace('_', ' ') for s in symptoms]
+        names = [e['name'] for e in explanations[:3]]
+        summary = (f"From the words you used ({', '.join(shown[:4])}), the most common matches are {', '.join(names)}. "
+                   "That is a rough guess from keywords, not a diagnosis. The steps below are general care.") if names else \
+                  'This looks like a warning sign, so the guidance below is the safe first response.'
         result = {
-            'summary': 'Keyword-based check only. It cannot weigh how long or how severe your symptoms are.',
-            'reported': {'symptoms': [str(s) for s in symptoms], 'details': []},
-            'detected_symptoms': [str(s) for s in symptoms],
+            'summary': summary,
+            'reported': {'symptoms': shown, 'details': []},
+            'detected_symptoms': shown,
             'possible_explanations': explanations,
             'possible_conditions': [e['name'] for e in explanations],
             'recommendations': [localize_text(str(r), region) for r in recommendations],
@@ -412,6 +426,7 @@ class SymptomChecker:
             'analysis_mode': 'basic',
             'disclaimer': DISCLAIMER_BASIC,
         }
+        first_aid.apply(result, guides, symptom_text, lambda s: localize_text(s, region))    # injuries and first-aid situations: what to DO comes first
         return self._apply_safety_net(result, symptom_text, mode='basic')
 
     def _extract_symptoms(self, text: str) -> List[str]:

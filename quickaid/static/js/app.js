@@ -8,6 +8,13 @@
   var doc = document;
   var csrfMeta = doc.querySelector('meta[name="csrf-token"]');
   var CSRF = csrfMeta ? csrfMeta.content : '';
+  var I18N = window.QA_I18N || {}, LANG = window.QA_LANG || 'en', AI = window.QA_AI || { available: false, allowed: true };
+  // T(key, englishFallback, {vars}): the translated string when there is one, otherwise the English text. Never an error, never a blank.
+  function T(key, fallback, vars) {
+    var str = I18N[key] != null ? I18N[key] : fallback;
+    if (vars) Object.keys(vars).forEach(function (k) { str = str.split('{' + k + '}').join(vars[k]); });
+    return str;
+  }
 
   /* ---------- tiny DOM helper ---------- */
   function h(tag, props) {
@@ -122,10 +129,17 @@
   var emergencyNumber = doc.body.getAttribute('data-emergency') || 'your local emergency number';
 
   var TRIAGE = {
-    low:    { title: 'Likely manageable at home', msg: 'Follow the steps below and keep an eye out for changes.' },
-    medium: { title: 'See a doctor soon', msg: 'Arrange a visit within a day or two, or sooner if it gets worse.' },
-    high:   { title: 'Get medical help now', msg: null }
+    low:    { title: T('low_title', 'Likely manageable at home'), msg: T('low_msg', 'Follow the steps below and keep an eye out for changes.') },
+    medium: { title: T('medium_title', 'See a doctor soon'), msg: T('medium_msg', 'Arrange a visit within a day or two, or sooner if it gets worse.') },
+    high:   { title: T('high_title', 'Get medical help now'), msg: null }
   };
+  // The emergency number goes where the language wants it ("Call 112 now" vs "112 पर कॉल करें"): split the template on {n} and put the link there.
+  function appendCallLine(p, template, number) {
+    var parts = template.split('{n}');
+    p.appendChild(doc.createTextNode(parts[0]));
+    p.appendChild(h('a', { href: 'tel:' + number, text: number }));
+    p.appendChild(doc.createTextNode(parts.slice(1).join('{n}')));
+  }
   var SVG_NS = 'http://www.w3.org/2000/svg';
   function icon(path) {
     var s = doc.createElementNS(SVG_NS, 'svg');
@@ -176,8 +190,9 @@
   function followUpLink(kind, analysisId) {
     if (!analysisId) return null;
     var link = h('a', { class: 'btn btn-ghost', href: '/chat?type=' + (kind === 'image' ? 'image' : 'symptom') + '&id=' + analysisId });
-    link.appendChild(doc.createTextNode('Ask a follow-up question'));
-    return h('p', { class: 'result-actions' }, link);
+    link.appendChild(doc.createTextNode(T('followup', 'Ask a follow-up question')));
+    var report = h('a', { class: 'btn btn-ghost', href: '/history/' + (kind === 'image' ? 'image' : 'symptom') + '/' + analysisId }, T('view_report', 'Open the full report'));
+    return h('p', { class: 'result-actions' }, link, report);
   }
 
   function explanations(container, items, title) {
@@ -220,10 +235,10 @@
     var r = a.reliability;
     if (!r) return null;
     var box = h('div', { class: 'reliability', 'data-level': r.level });
-    box.appendChild(h('div', { class: 'rel-head' }, h('strong', { text: 'How reliable is this?' }), h('span', { class: 'rel-label', text: r.label })));
+    box.appendChild(h('div', { class: 'rel-head' }, h('strong', { text: T('reliable', 'How reliable is this?') }), h('span', { class: 'rel-label', text: r.label })));
     if (a.uncertainty_statement) box.appendChild(h('p', { class: 'rel-statement', text: a.uncertainty_statement }));
     if (r.reasons && r.reasons.length) {
-      var d = h('details', {}, h('summary', { text: 'Why this rating' }), list(r.reasons));
+      var d = h('details', {}, h('summary', { text: T('why_rating', 'Why this rating') }), list(r.reasons));
       if (r.ai_self_rating) d.appendChild(h('p', { class: 'hint', text: 'The AI rated its own confidence as "' + r.ai_self_rating.value + '". ' + r.ai_self_rating.note }));
       d.appendChild(h('p', { class: 'hint', text: r.note }));
       box.appendChild(d);
@@ -235,7 +250,7 @@
     var s = a.safety_review;
     if (!s) return null;
     var items = (s.adjustments && s.adjustments.length) ? list(s.adjustments) : h('p', { class: 'hint', text: 'Our safety checks looked at this result and found nothing to change.' });
-    var d = h('details', {}, h('summary', { text: 'Safety checks applied' + (s.urgency_raised ? ' (urgency raised)' : '') }), items);
+    var d = h('details', {}, h('summary', { text: T('safety_checks', 'Safety checks applied') + (s.urgency_raised ? ' (urgency raised)' : '') }), items);
     d.style.marginTop = '1rem';
     return d;
   }
@@ -243,8 +258,9 @@
   function followUpLink(kind, analysisId) {
     if (!analysisId) return null;
     var link = h('a', { class: 'btn btn-ghost', href: '/chat?type=' + (kind === 'image' ? 'image' : 'symptom') + '&id=' + analysisId });
-    link.appendChild(doc.createTextNode('Ask a follow-up question'));
-    return h('p', { class: 'result-actions' }, link);
+    link.appendChild(doc.createTextNode(T('followup', 'Ask a follow-up question')));
+    var report = h('a', { class: 'btn btn-ghost', href: '/history/' + (kind === 'image' ? 'image' : 'symptom') + '/' + analysisId }, T('view_report', 'Open the full report'));
+    return h('p', { class: 'result-actions' }, link, report);
   }
 
   /* Photos: what is VISIBLE (observation) and what it MIGHT MEAN (interpretation) are separate cards on purpose. */
@@ -307,6 +323,7 @@
 
   function renderResult(container, a, kind, analysisId) {
     var nodes = [];
+    if (LANG !== 'en') nodes.push(h('div', { class: 'alert alert-warn', role: 'note', text: T('review_notice', '', { n: emergencyNumber }) }));
     var level = a.urgency || a.urgency_level || 'medium';
     if (a.emergency_alert && a.emergency_alert.alert) level = 'high';
     if (!TRIAGE[level]) level = 'medium';
@@ -319,10 +336,10 @@
       if (a.care_level === 'emergency') { level = 'high'; t = TRIAGE.high; }
       else if (a.care_level === 'same_day') {
         level = 'high'; sameDay = true;
-        t = { title: 'See a doctor today', msg: (a.timeframe && a.timeframe !== 'Today') ? a.timeframe : 'Get checked today, even if it feels manageable.' };
+        t = { title: T('sameday_title', 'See a doctor today'), msg: (a.timeframe && a.timeframe !== 'Today') ? a.timeframe : T('sameday_msg', 'Get checked today, even if it feels manageable.') };
       }
-      else if (a.care_level === 'soon') { level = 'medium'; t = { title: 'See a doctor soon', msg: 'Suggested timing: ' + (a.timeframe || 'within 1–2 days') + '.' }; }
-      else { level = 'low'; t = { title: 'Likely manageable at home', msg: a.timeframe || TRIAGE.low.msg }; }
+      else if (a.care_level === 'soon') { level = 'medium'; t = { title: T('medium_title', 'See a doctor soon'), msg: T('soon_timing', 'Suggested timing: {t}.', { t: a.timeframe || '1–2' }) }; }
+      else { level = 'low'; t = { title: T('low_title', 'Likely manageable at home'), msg: a.timeframe || TRIAGE.low.msg }; }
     }
     // A rule-based photo check cannot establish that something is minor, so don't claim it.
     var unknown = kind === 'image' && a.analysis_mode === 'basic' && level === 'low';
@@ -330,11 +347,14 @@
     var emergency = a.emergency_alert && a.emergency_alert.alert;
     if (insufficient && !emergency) {
       unknown = true;
-      t = { title: 'Not enough to assess', msg: kind === 'image' ? 'This photo cannot be assessed reliably, so no conclusion is given. See the tips below.' : 'There is not enough information to assess this.' };
+      t = { title: T('insufficient_title', 'Not enough to assess'), msg: kind === 'image' ? T('insufficient_photo', 'This photo cannot be assessed reliably, so no conclusion is given. See the tips below.') : T('insufficient_text', 'There is not enough information to assess this.') };
     }
 
     if (a.analysis_mode === 'basic') {
-      nodes.push(h('div', { class: 'alert alert-warn', text: 'AI is not connected, so this is only a basic rule-based check. It can miss serious problems, especially if symptoms are described in unusual words or another language. If you are worried, do not wait: call ' + emergencyNumber + ' or see a doctor.' }));
+      nodes.push(h('div', { class: 'alert alert-warn', text: T('basic_notice', 'AI is not connected, so this is only a basic rule-based check. It can miss serious problems, especially if symptoms are described in unusual words or another language. If you are worried, do not wait: call {n} or see a doctor.', { n: emergencyNumber }) }));
+      if (AI.available && !AI.allowed) nodes.push(h('div', { class: 'alert alert-info', role: 'note' }, T('ai_off_notice', 'You are seeing the simple built-in check because AI analysis is turned off. Turn it on for a more detailed result.') + ' ',
+        h('button', { type: 'button', class: 'btn btn-sm', 'data-ai-consent': 'true', 'data-reload': '1' }, T('ai_turn_on', 'Turn on AI analysis'))));
+      if (LANG !== 'en' && !(a.emergency_alert && a.emergency_alert.alert)) nodes.push(h('div', { class: 'alert alert-warn', text: T('basic_english_only', '') }));
     }
     if (a.quality_check && a.quality_check.rating !== 'good') {
       var qbox = h('div', { class: 'alert alert-warn' }, h('strong', { text: 'Photo quality: ' + a.quality_check.rating + '. ' }), doc.createTextNode((a.quality_check.issues || []).join(' ')));
@@ -348,18 +368,14 @@
     msgBox.appendChild(h('p', { class: 'lvl', text: t.title }));
     if (level === 'high' && !sameDay && !insufficient) {
       var p = h('p', {});
-      p.appendChild(doc.createTextNode('Call '));
-      p.appendChild(h('a', { href: 'tel:' + emergencyNumber, text: emergencyNumber }));
-      p.appendChild(doc.createTextNode(' or go to the nearest emergency department now.'));
+      appendCallLine(p, T('high_call', 'Call {n} or go to the nearest emergency department now.'), emergencyNumber);
       msgBox.appendChild(p);
       if (emergency && a.emergency_alert.reason) msgBox.appendChild(h('p', { text: a.emergency_alert.reason }));
     } else {
       msgBox.appendChild(h('p', { text: t.msg }));
       if (sameDay || insufficient) {
         var p2 = h('p', {});
-        p2.appendChild(doc.createTextNode(insufficient ? 'If it is painful, bleeding or getting worse, see a doctor, or call ' : 'If it gets worse or you feel unsafe, call '));
-        p2.appendChild(h('a', { href: 'tel:' + emergencyNumber, text: emergencyNumber }));
-        p2.appendChild(doc.createTextNode(insufficient ? ' in an emergency.' : '.'));
+        appendCallLine(p2, insufficient ? T('if_painful', 'If it is painful, bleeding or getting worse, see a doctor, or call {n} in an emergency.') : T('if_worse', 'If it gets worse or you feel unsafe, call {n}.'), emergencyNumber);
         msgBox.appendChild(p2);
       }
     }
@@ -380,11 +396,11 @@
       if (!explanations(body, a.possible_explanations, 'What it could be')) chips(body, 'Possible causes', a.possible_conditions);
     }
     section(body, 'Warning signs present now', a.red_flags_present, 'present');
-    section(body, kind === 'symptom' ? 'What to do' : 'What to do now', a.recommendations);
-    section(body, 'Avoid', a.avoid, 'avoid');
-    section(body, kind === 'symptom' ? 'Warning signs: get urgent help if' : 'Warning signs to watch for', a.red_flags);
-    section(body, 'See a doctor if', a.see_doctor_when);
-    section(body, 'What would make this more reliable', a.information_gaps);
+    section(body, kind === 'symptom' ? T('what_to_do', 'What to do') : T('what_to_do_now', 'What to do now'), a.recommendations);
+    section(body, T('avoid', 'Avoid'), a.avoid, 'avoid');
+    section(body, kind === 'symptom' ? T('warn_urgent', 'Warning signs: get urgent help if') : T('warn_watch', 'Warning signs to watch for'), a.red_flags);
+    section(body, T('see_doctor_if', 'See a doctor if'), a.see_doctor_when);
+    section(body, T('more_reliable', 'What would make this more reliable'), a.information_gaps);
     if (a.interview && a.interview.answers && a.interview.answers.length) {
       var qa = h('ul', {});
       a.interview.answers.forEach(function (x) { qa.appendChild(h('li', { text: x.question + ' ' + x.answer })); });
@@ -598,18 +614,19 @@
     function upload() {
       if (!chosen || xhr) return;
       var fd = new FormData(); fd.append('file', chosen, chosen.name || 'photo.jpg');
-      xhr = new XMLHttpRequest(); xhr.open('POST', '/upload'); xhr.setRequestHeader('X-CSRFToken', CSRF); xhr.timeout = 120000;
+      var slowUpload = null; xhr = new XMLHttpRequest(); xhr.open('POST', '/upload'); xhr.setRequestHeader('X-CSRFToken', CSRF); xhr.timeout = 90000;
       setStatus(''); resultBox.classList.remove('on');
       analyzeBtn.disabled = true; progressBox.hidden = false; progressBox.classList.remove('indeterminate'); bar.style.width = '0%'; stageEl.textContent = 'Uploading… 0%';
       xhr.upload.onprogress = function (e) {
         if (!e.lengthComputable) return;
         var pct = Math.round(e.loaded / e.total * 100); bar.style.width = pct + '%'; stageEl.textContent = 'Uploading… ' + pct + '% (' + mb(e.loaded) + ' of ' + mb(e.total) + ')';
       };
-      xhr.upload.onload = function () { bar.style.width = '100%'; progressBox.classList.add('indeterminate'); stageEl.textContent = 'Uploaded. Checking photo quality and analysing…'; };
+      xhr.upload.onload = function () { bar.style.width = '100%'; progressBox.classList.add('indeterminate'); stageEl.textContent = 'Uploaded. Checking photo quality and analysing…'; slowUpload = setTimeout(function () { stageEl.textContent = T('slow_hint', 'Still working. Detailed analysis can take up to 30 seconds. If it takes longer, a quick built-in check is shown instead.'); }, 10000); };
       xhr.onload = function () {
         var data; try { data = JSON.parse(xhr.responseText); } catch (e) { data = { error: 'The server sent an unexpected response.' }; }
         if (xhr.status === 401) { window.location.href = '/login?next=' + encodeURIComponent(window.location.pathname); return; }
-        if (xhr.status >= 200 && xhr.status < 300 && data.analysis) {
+        clearTimeout(slowUpload);
+      if (xhr.status >= 200 && xhr.status < 300 && data.analysis) {
           renderResult(resultBox, data.analysis, 'image', data.analysis_id); countCheck('image', data.analysis);
           var q = data.analysis.quality_check, poor = data.analysis.assessment_status === 'insufficient' || data.analysis.assessment_status === 'invalid' || (q && q.rating === 'poor');
           if (poor) {
@@ -623,7 +640,7 @@
         }
       };
       xhr.onerror = function () { showProblem('Network problem. The photo was not sent.', ['Check your connection and try again.'], true); };
-      xhr.ontimeout = function () { showProblem('This is taking too long.', ['Check your connection and try again.'], true); };
+      xhr.ontimeout = function () { clearTimeout(slowUpload); showProblem(T('too_slow', 'This is taking too long. Please try again.'), ['Your photo was received but the analysis did not finish. Try again, or use a smaller photo.'], true); };
       xhr.onabort = function () { setStatus('Upload cancelled. You can try again.'); };
       xhr.onloadend = function () { xhr = null; progressBox.hidden = true; progressBox.classList.remove('indeterminate'); analyzeBtn.disabled = !chosen; };
       xhr.send(fd);
@@ -658,7 +675,11 @@
       });
     });
 
-    function busy(on) {
+    var slowTimer = null;
+  function busy(on) {
+    clearTimeout(slowTimer);
+    var oldHint = symLoading.querySelector('.slow-hint'); if (oldHint) oldHint.remove();
+    if (on) slowTimer = setTimeout(function () { symLoading.appendChild(h('span', { class: 'slow-hint', role: 'status', text: T('slow_hint', 'Still working. Detailed analysis can take up to 30 seconds. If it takes longer, a quick built-in check is shown instead.') })); }, 10000);
       symLoading.classList.toggle('on', on);
       [ivNext, ivSkip, ivFinish, ivCancel, symBtn].forEach(function (b) { if (b) b.disabled = on; });
     }
@@ -735,7 +756,7 @@
       ivBox.hidden = true; symIntro.hidden = true; iv.session = null;
       renderResult(symResult, d.analysis, 'symptom', d.analysis_id);
       countCheck('symptom', d.analysis);
-      var again = h('button', { type: 'button', class: 'btn btn-ghost btn-sm' }, 'Start a new check');
+      var again = h('button', { type: 'button', class: 'btn btn-ghost btn-sm' }, T('new_check', 'Start a new check'));
       again.addEventListener('click', function () { symInput.value = ''; updateCount(); symResult.classList.remove('on'); symIntro.hidden = false; symInput.focus(); });
       symResult.appendChild(h('p', { class: 'result-actions' }, again));
     }
@@ -748,10 +769,11 @@
 
     function call(url, body) {
       busy(true);
-      return fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF }, body: JSON.stringify(body) })
+      var ctl = window.AbortController ? new AbortController() : null, giveUp = ctl ? setTimeout(function () { ctl.abort(); }, 75000) : null;   // the server always answers within ~60 s
+      return fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF }, body: JSON.stringify(body), signal: ctl ? ctl.signal : undefined })
         .then(parseJsonResponse).then(handle)
-        .catch(function (err) { if (err.message !== 'auth') showError('Network problem. Check your connection and try again.'); })
-        .then(function () { busy(false); if (iv.q && !ivBox.hidden) ivNext.disabled = (iv.value === null || (Array.isArray(iv.value) && !iv.value.length)) && iv.q.type !== 'text'; });
+        .catch(function (err) { if (err.message === 'auth') return; showError(err && err.name === 'AbortError' ? T('too_slow', 'This is taking too long. Please try again.') : 'Network problem. Check your connection and try again.'); })
+        .then(function () { clearTimeout(giveUp); busy(false); if (iv.q && !ivBox.hidden) ivNext.disabled = (iv.value === null || (Array.isArray(iv.value) && !iv.value.length)) && iv.q.type !== 'text'; });
     }
 
     symBtn.addEventListener('click', function () {
@@ -787,4 +809,26 @@
         .catch(function () { msg.className = 'match-msg bad'; msg.textContent = 'Could not save. Try again.'; });
     });
   }
+
+  /* ----- AI consent: the card on the dashboard and the toggle under Account ----- */
+  function setAiConsent(granted, msgEl) {
+    return fetch('/api/privacy/ai-consent', { method: 'PUT', headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF }, body: JSON.stringify({ granted: granted }) })
+      .then(function (r) { return r.json().catch(function () { return { success: false, error: 'Unexpected server response.' }; }); })
+      .catch(function () { return { success: false, error: 'Network problem. Try again.' }; })
+      .then(function (d) {
+      if (!d.success) { if (msgEl) { msgEl.className = 'match-msg bad'; msgEl.textContent = d.error || 'Could not save your choice.'; } return d; }
+      if (msgEl) { msgEl.className = 'match-msg ok'; msgEl.textContent = granted ? 'AI analysis is on.' : 'AI analysis is off. Basic mode only.'; }
+      return d;
+    });
+  }
+  doc.addEventListener('click', function (e) {
+    var b = e.target.closest('[data-ai-consent]');
+    if (!b) return;
+    var granted = b.getAttribute('data-ai-consent') === 'true', card = doc.getElementById('aiConsentCard') || (b.hasAttribute('data-reload') ? b : null);
+    setAiConsent(granted, doc.getElementById('aiConsentMsg')).then(function (d) { if (d && d.success && card) setTimeout(function () { window.location.reload(); }, 600); });
+  });
+  var consentToggle = doc.getElementById('aiConsentToggle');
+  if (consentToggle) consentToggle.addEventListener('change', function () {
+    setAiConsent(consentToggle.checked, doc.getElementById('aiConsentMsgAccount')).then(function (d) { if (d && !d.success) consentToggle.checked = !consentToggle.checked; });
+  });
 })();

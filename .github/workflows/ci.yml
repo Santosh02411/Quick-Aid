@@ -6,51 +6,125 @@ on:
   pull_request:
     branches: [main]
   schedule:
-    # Weekly, even with no code changes, so newly-disclosed CVEs in
-    # pinned dependencies still get caught.
+    # Weekly, even with no code changes, so newly-disclosed CVEs in pinned dependencies still get caught.
     - cron: '0 6 * * 1'
   workflow_dispatch: {}
 
+# Least privilege: no job can write to the repository or read secrets it does not need.
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  SECRET_KEY: ci-only-not-a-real-secret
+  REQUIRE_AI_CONSENT: 'false'
+
 jobs:
-  test:
+  lint:
+    name: Lint and static security checks
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12', cache: pip }
+      - run: pip install ruff bandit
+      # Syntax errors, undefined names and other things that are bugs, not style.
+      - name: Ruff (bugs only)
+        run: ruff check quickaid scripts tests evaluation --select E9,F63,F7,F82
+      # Medium/high severity security patterns in the application code.
+      - name: Bandit
+        run: bandit -r quickaid -ll -q -x quickaid/evaluation
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-          cache: 'pip'
+  secrets:
+    name: Secret scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }          # full history, so a secret that was committed and later deleted is still found
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - name: Working tree must be clean of secrets and forbidden files
+        run: python scripts/secret_scan.py
+      - name: Full history (advisory until history has been rewritten)
+        # A repository that ever committed a .env stays flagged until the history is purged and the keys are rotated.
+        # Remove `continue-on-error` once that is done so a future leak fails the build.
+        continue-on-error: true
+        run: python scripts/secret_scan.py --history
 
-      - name: Install dependencies
-        run: pip install -r requirements-dev.txt
-
-      - name: Run tests
-        run: pytest -v
-
+  test:
+    name: Tests (Python ${{ matrix.python }})
+    runs-on: ubuntu-latest
+    needs: [lint]
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ['3.11', '3.12']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '${{ matrix.python }}', cache: pip }
+      - run: pip install -r requirements-dev.txt
+      - name: Tests with a coverage floor
+        run: pytest -q -p no:cacheprovider --cov=quickaid --cov-report=term-missing:skip-covered --cov-fail-under=90 -m "not browser"
       - name: Database migrations apply cleanly to a new database
         run: DATABASE_PATH=/tmp/ci-migrate.db python -m quickaid.core.migrations upgrade && DATABASE_PATH=/tmp/ci-migrate.db python -m quickaid.core.migrations check
-
       - name: Evaluation datasets match their recorded versions
         run: python evaluation/manage_datasets.py check
-
       - name: Safety evaluation (fails if a safety threshold is missed)
         run: python evaluation/run_evaluation.py --weak-model --no-write
 
+  browser:
+    name: Browser end-to-end and accessibility
+    runs-on: ubuntu-latest
+    needs: [lint]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12', cache: pip }
+      - uses: actions/setup-node@v4
+        with: { node-version: '20' }
+      - run: pip install -r requirements-dev.txt
+      - run: python -m playwright install --with-deps chromium
+      - run: npm install --prefix /tmp/axe axe-core
+      - name: Real-browser journeys, with an automated accessibility scan of every key page
+        env:
+          AXE_PATH: /tmp/axe/node_modules/axe-core/axe.min.js
+        run: pytest -q -p no:cacheprovider -m browser tests/e2e
+
   dependency-audit:
+    name: Dependency vulnerabilities
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12', cache: pip }
+      - run: pip install pip-audit==2.7.3
+      - run: pip-audit -r requirements.txt --strict
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-          cache: 'pip'
-
-      - name: Install pip-audit
-        run: pip install pip-audit==2.7.3
-
-      - name: Audit dependencies for known vulnerabilities
-        run: pip-audit -r requirements.txt --strict
+  docker:
+    name: Container build and smoke test
+    runs-on: ubuntu-latest
+    needs: [lint]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the image
+        run: docker build -t quickaid:ci .
+      - name: The image must not contain secrets or the git history
+        run: |
+          docker run --rm --entrypoint sh quickaid:ci -c 'test ! -e /app/.env && test ! -e /app/.git && echo "no .env, no .git in the image"'
+      - name: Runs as a non-root user
+        run: test "$(docker run --rm --entrypoint id quickaid:ci -u)" != "0"
+      - name: Start hardened (read-only filesystem, no capabilities) and wait until it is READY
+        run: |
+          docker run -d --name qa --read-only --tmpfs /tmp --tmpfs /app/uploads:uid=1000,gid=1000 --tmpfs /app/data:uid=1000,gid=1000 --tmpfs /app/logs:uid=1000,gid=1000 \
+            --cap-drop ALL --security-opt no-new-privileges:true -e SECRET_KEY=ci-only-not-a-real-secret -p 5000:5000 quickaid:ci
+          for i in $(seq 1 40); do curl -fsS localhost:5000/ready && break || sleep 1; done
+          curl -fsS localhost:5000/health
+          test "$(curl -s -o /dev/null -w '%{http_code}' localhost:5000/metrics)" = "404"   # metrics are not public
+          test "$(curl -s -o /dev/null -w '%{http_code}' -X POST localhost:5000/api/history/clear)" != "200"
+      - name: Show logs if anything failed
+        if: failure()
+        run: docker logs qa

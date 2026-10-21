@@ -21,12 +21,14 @@ Without it: a built-in question bank and the rule-based checker do the same job.
 
 import json
 import re
+import os
 import time
 from typing import Dict, List, Literal, Optional, Tuple
 
 from google.genai import types
 
-from quickaid.ai import telemetry, triage_engine
+from quickaid.i18n import prompts as language_prompts
+from quickaid.ai import first_aid, model_calls, consent, telemetry, triage_engine
 from quickaid.ai.schemas import InterviewPlan, SymptomAssessment, validate_response
 from quickaid.ai.symptom_checker import SYSTEM_INSTRUCTION as _CHECKER_RULES, SymptomChecker
 from quickaid.ai.triage_engine import AGE_LABEL, DURATION_LABEL, DURATION_RANK, engine as triage, scan_red_flags
@@ -270,7 +272,7 @@ class InterviewEngine:
 
     @property
     def use_gemini(self) -> bool:
-        return self.checker.use_gemini
+        return self.checker.use_gemini and consent.external_allowed()
 
     # ------------------------------------------------------------------ start
 
@@ -290,12 +292,17 @@ class InterviewEngine:
                     'course': None, 'history': None, 'urgent_flags': [], 'notes': [], 'selected': []},
             'plan': self._make_plan(text, detected), 'ai': self.use_gemini,
         }
-        q = self._next_question(state)
+        # An injury or first-aid situation with no illness symptoms (a cut, a burn, a bite...): the questionnaire asks about fever and cough, which
+        # is pointless and slow. Go straight to the assessment, which gives the first-aid steps.
+        instant = bool(first_aid.match(text)) and not detected
+        q = None if instant else self._next_question(state)
         state['current'] = q['id'] if q else None
         return {'state': state, 'emergency': None, 'question': q}
 
     def _make_plan(self, text: str, detected: List[str]) -> Dict:
-        if self.use_gemini:
+        # The question bank is instant. Asking the model to tailor the questions put a whole extra model round-trip before the person saw ANY question,
+        # so it is opt-in (INTERVIEW_AI_PLAN=true). The final assessment still uses the model and the full set of answers.
+        if self.use_gemini and os.getenv('INTERVIEW_AI_PLAN', 'false').strip().lower() in ('1', 'true', 'yes'):
             plan = self._plan_with_gemini(text)
             if plan:
                 return plan
@@ -321,14 +328,16 @@ class InterviewEngine:
         return {'associated': assoc, 'extras': extras, 'source': 'bank'}
 
     def _plan_with_gemini(self, text: str) -> Optional[Dict]:
+        budget = model_calls.Budget(12)
         for attempt in (1, 2):
             try:
                 with telemetry.call('interview_plan', self.checker.MODEL_NAME, 'interview_plan') as tcall:
                     resp = self.checker.client.models.generate_content(
                         model=self.checker.MODEL_NAME,
                         contents=f'First message from the person:\n"""\n{text}\n"""',
-                        config=types.GenerateContentConfig(system_instruction=PLAN_INSTRUCTION, response_mime_type='application/json',
-                                                           response_schema=InterviewPlan, temperature=0.3))
+                        config=types.GenerateContentConfig(system_instruction=PLAN_INSTRUCTION + language_prompts.note(), response_mime_type='application/json',
+                                                           response_schema=InterviewPlan, temperature=0.3,
+                                                           **model_calls.speed_kwargs(self.checker.MODEL_NAME, 8)))
                     tcall.api_done(resp)
                     parsed = validate_response(resp, InterviewPlan)
                     tcall.valid(parsed is not None)
@@ -337,8 +346,10 @@ class InterviewEngine:
                 return self._sanitize_plan(parsed)
             except Exception as e:
                 logger.warning("Gemini interview plan attempt %d failed: %s", attempt, e)
-                if attempt == 1:
+                if attempt == 1 and budget.allows_retry(e, self.checker.MODEL_NAME):
                     time.sleep(0.8)
+                else:
+                    break
         return None
 
     @staticmethod
@@ -557,13 +568,15 @@ class InterviewEngine:
                 f'Known facts (including ones stated in the first message):\n' + '\n'.join(known) + f'\n\nInterview:\n{lines}')
 
     def _assess_with_gemini(self, state: Dict, qa: List[Dict], region: str) -> Optional[Dict]:
+        budget = model_calls.Budget()
         for attempt in (1, 2):
             try:
                 with telemetry.call('interview_assess', self.checker.MODEL_NAME, 'interview_assess') as tcall:
                     resp = self.checker.client.models.generate_content(
                         model=self.checker.MODEL_NAME, contents=self._transcript(state, qa),
-                        config=types.GenerateContentConfig(system_instruction=ASSESS_INSTRUCTION, response_mime_type='application/json',
-                                                           response_schema=SymptomAssessment, temperature=0.2))
+                        config=types.GenerateContentConfig(system_instruction=ASSESS_INSTRUCTION + language_prompts.note(), response_mime_type='application/json',
+                                                           response_schema=SymptomAssessment, temperature=0.2,
+                                                           **model_calls.speed_kwargs(self.checker.MODEL_NAME)))
                     tcall.api_done(resp)
                     validated = validate_response(resp, SymptomAssessment)
                     tcall.valid(validated is not None)
@@ -572,8 +585,10 @@ class InterviewEngine:
                 return self.checker._assessment_to_dict(validated, region)
             except Exception as e:
                 logger.warning("Gemini interview assessment attempt %d failed: %s", attempt, e)
-                if attempt == 1:
+                if attempt == 1 and budget.allows_retry(e, self.checker.MODEL_NAME):
                     time.sleep(1.0)
+                else:
+                    break
         return None
 
     def _assess_basic(self, state: Dict, region: str) -> Dict:
@@ -604,9 +619,12 @@ class InterviewEngine:
                     warn.append(w)
         warn = (warn + GENERAL_WARNING_SIGNS)[:6] if warn else list(GENERAL_WARNING_SIGNS)
 
-        return {
-            'summary': ('Based on your answers, here is how this looks. ' if expl else 'There is not enough here to narrow down a cause, so this is general guidance. ')
-                       + 'This is a rule-based assessment, so it cannot weigh everything a clinician would.',
+        shown = [s.replace('_', ' ') for s in symptoms]
+        names = [e['name'] for e in expl[:3]]
+        out = {
+            'summary': (f"From what you told us ({', '.join(shown[:4])}), the most common matches are {', '.join(names)}. That is a rough, rule-based guess and not a diagnosis; "
+                        "it cannot weigh everything a clinician would. The steps below are general care." if expl else
+                        'There is not enough here to narrow down a cause, so this is general guidance. This is a rule-based assessment, so it cannot weigh everything a clinician would.'),
             'possible_explanations': expl, 'possible_conditions': [e['name'] for e in expl],
             'detected_symptoms': symptoms, 'reported': {'symptoms': symptoms, 'details': []},
             'urgency_level': analysis['urgency'], 'timeframe': '',
@@ -617,6 +635,9 @@ class InterviewEngine:
             'safety_tips': [localize_text(t, region) for t in ck._get_symptom_safety_tips()],
             'analysis_mode': 'basic', 'disclaimer': DISCLAIMER_BASIC,
         }
+        guide_text = ' '.join([state['text']] + list(state['ctx'].get('selected', [])))
+        first_aid.apply(out, first_aid.match(guide_text), guide_text, lambda s: localize_text(s, region))
+        return out
 
     # ------------------------------------------------------------------ rule-based risk checks (live in the triage engine)
 

@@ -1,42 +1,43 @@
 {% extends 'base.html' %}
 {% from '_macros.html' import icon %}
 {% set active_page = 'emergency' %}
-{% block title %}Emergency{% endblock %}
+{% block title %}{{ t('em.title') }}{% endblock %}
 {% block content %}
 <div class="page">
-  <div class="page-head"><h1>Emergency help</h1></div>
-  <p class="lead muted" style="max-width:60ch">If someone is in danger, call first. Everything below can wait until you have called.</p>
+  <div class="page-head"><h1>{{ t('em.title') }}</h1></div>
+  <p class="lead muted" style="max-width:60ch">{{ t('em.lead') }}</p>
 
   <div class="call-tiles">
     <a class="call-tile" href="tel:{{ emergency_number }}">
       <div class="n">{{ emergency_number }}</div>
-      <div class="t">{{ icon('phone') }} National emergency number</div>
+      <div class="t">{{ icon('phone') }} {{ t('em.national') }}</div>
     </a>
     {% if ambulance_number and ambulance_number != emergency_number %}
     <a class="call-tile" href="tel:{{ ambulance_number }}">
       <div class="n">{{ ambulance_number }}</div>
-      <div class="t">{{ icon('phone') }} Ambulance</div>
+      <div class="t">{{ icon('phone') }} {{ t('em.ambulance') }}</div>
     </a>
     {% endif %}
   </div>
 
-  <h2>Call {{ emergency_number }} straight away for</h2>
+  <h2>{{ t('em.call_for', number=emergency_number) }}</h2>
   <div class="panel" style="margin-bottom:2rem">
     <ul style="columns:2 280px;margin:0;padding-left:1.2rem">
-      <li>Chest pain, pressure or tightness</li>
-      <li>Severe trouble breathing</li>
-      <li>Signs of stroke: face drooping, arm weakness, slurred speech</li>
-      <li>Bleeding that won't stop after 10 minutes of firm pressure</li>
-      <li>Loss of consciousness or a seizure</li>
-      <li>Severe burns, or burns to the face, hands or genitals</li>
-      <li>Poisoning or overdose</li>
-      <li>A suspected broken bone with deformity or numbness</li>
-      <li>Severe allergic reaction with swelling of the lips or throat</li>
-      <li>Thoughts of ending your life. In India you can also call Tele-MANAS on 14416</li>
+      <li>{{ t('em.i1') }}</li>
+      <li>{{ t('em.i2') }}</li>
+      <li>{{ t('em.i3') }}</li>
+      <li>{{ t('em.i4') }}</li>
+      <li>{{ t('em.i5') }}</li>
+      <li>{{ t('em.i6') }}</li>
+      <li>{{ t('em.i7') }}</li>
+      <li>{{ t('em.i8') }}</li>
+      <li>{{ t('em.i9') }}</li>
+      <li>{{ t('em.i10') }}</li>
     </ul>
   </div>
 
   <h2>First-aid basics</h2>
+  {% if lang != 'en' %}<p class="hint" lang="en">{{ t('em.guides_english') }}</p>{% endif %}
   <div class="guides">
     <article class="guide">
       <h3>Heavy bleeding</h3>

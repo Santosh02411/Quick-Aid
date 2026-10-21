@@ -91,9 +91,49 @@
   </section>
   {% endif %}
 
+  <section class="panel" style="margin-bottom:1.25rem" id="security">
+    <h2>Sign-in security</h2>
+    <p class="muted">You are signed out automatically after {{ session_idle_minutes }} minutes without activity, and after {{ session_absolute_hours }} hours regardless.</p>
+    {% if account_user.totp_enabled %}
+    <h3>Recovery codes</h3>
+    <p>{% if recovery_remaining == 0 %}<strong class="danger-text">You have no recovery codes left.</strong>{% elif recovery_remaining <= 3 %}<strong>You have only {{ recovery_remaining }} recovery code{{ '' if recovery_remaining == 1 else 's' }} left.</strong>{% else %}You have {{ recovery_remaining }} unused recovery codes.{% endif %}
+       They let you sign in if you lose your authenticator app.</p>
+    <form method="post" action="/account/2fa/recovery-codes" class="inline-form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      {% if account_user.has_password %}<div class="field"><label for="rc_pw">Current password</label><input type="password" id="rc_pw" name="current_password" autocomplete="current-password" required></div>{% endif %}
+      <div class="field"><label for="rc_code">Authenticator code</label><input type="text" id="rc_code" name="code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9 ]*" maxlength="7" required></div>
+      <button type="submit" class="btn btn-ghost btn-sm">Create new recovery codes</button>
+    </form>
+    {% endif %}
+    <h3>Devices</h3>
+    <form method="post" action="/account/sessions/revoke"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <p>Signed in somewhere you no longer use, or on a shared computer?</p>
+      <button type="submit" class="btn btn-ghost btn-sm">Sign out all other devices</button></form>
+    <h3>Recent security activity</h3>
+    {% if security_events %}
+    <div class="table-wrap" tabindex="0" role="region" aria-label="{{ t('a11y.table') }}"><table class="tbl"><thead><tr><th>When (UTC)</th><th>What</th><th>Network</th></tr></thead><tbody>
+      {% for e in security_events %}<tr><td>{{ e.created_at[:16]|replace('T', ' ') }}</td>
+        <td>{{ {'login': 'Signed in', 'login_failed': 'Wrong password entered', 'logout': 'Signed out', 'password_changed': 'Password changed', 'password_reset_requested': 'Password reset requested',
+                 'password_reset_completed': 'Password reset', '2fa_enabled': 'Two-factor turned on', '2fa_disabled': 'Two-factor turned off', 'twofa_failed': 'Wrong 2FA code',
+                 'recovery_code_used': 'Recovery code used', 'recovery_codes_regenerated': 'New recovery codes', 'signed_out_everywhere': 'Other devices signed out',
+                 'session_expired': 'Session expired', 'email_changed': 'Email changed', 'data_exported': 'Data exported', 'history_cleared': 'History deleted',
+                 'ai_consent_granted': 'AI analysis allowed', 'ai_consent_withdrawn': 'AI analysis turned off', 'unverified_account_claimed_via_google': 'Account claimed via Google'}.get(e.event, e.event) }}{% if e.detail %} <span class="muted">({{ e.detail }})</span>{% endif %}</td>
+        <td class="mono">{{ e.network or '—' }}</td></tr>{% endfor %}</tbody></table></div>
+    <p class="hint">Networks are shortened (for example 203.0.113.0/24) so they identify a network, not a person. If something here is not you, change your password.</p>
+    {% else %}<p class="muted">Nothing yet.</p>{% endif %}
+  </section>
+
   <section class="panel" style="margin-bottom:1.25rem" id="your-data">
     <h2>Your data</h2>
     <p class="muted">You have {{ saved_counts.symptom }} symptom check{{ '' if saved_counts.symptom == 1 else 's' }} and {{ saved_counts.image }} photo check{{ '' if saved_counts.image == 1 else 's' }} saved. Photos themselves are never kept. They are deleted right after analysis.</p>
+    {% if ai_consent_visible %}
+    <div class="field">
+      <label class="check"><input type="checkbox" id="aiConsentToggle" data-ai-consent-toggle {{ 'checked' if ai_consent_granted }}>
+        Send my text and photos to the AI service (Google Gemini)</label>
+      <div class="hint">When this is off, nothing you type or upload leaves this server, and the less capable built-in basic mode is used. <a href="/privacy#ai">What is sent?</a></div>
+      <div class="match-msg" id="aiConsentMsgAccount" aria-live="polite"></div>
+    </div>
+    {% endif %}
     <div class="field">
       <label for="retentionSelect">Keep my saved checks and chats for</label>
       <select id="retentionSelect" data-retention-select>

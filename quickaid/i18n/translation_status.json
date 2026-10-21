@@ -1,0 +1,14 @@
+{
+ "note": "Every non-English string was written by an AI assistant. NONE has been reviewed by a native-speaking clinician. Do not rely on them for emergencies until this changes.",
+ "reviewed_by_clinician": {
+  "hi": false,
+  "mr": false,
+  "kn": false
+ },
+ "safety_critical_files": [
+  "quickaid/i18n/emergency.py (guidance, labels, detection patterns)",
+  "quickaid/i18n/catalog.py keys: em.*, js.high_*, js.basic_notice, consent.*, lang.notice"
+ ],
+ "reviewers": [],
+ "last_review": null
+}

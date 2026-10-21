@@ -38,3 +38,22 @@ htmlcov/
 # Evaluation: licensed or personal reference photos stay out of git (the manifest and README are shared)
 evaluation/reference/images/
 evaluation/reference/manifest.json
+
+# --- secrets and private data: never commit these (scripts/secret_scan.py enforces it) ---
+.env.local
+.env.production
+*.env
+!.env.example
+.data_key
+*.pem
+*.key
+*.p12
+credentials.json
+service-account*.json
+data/backups/
+backups/
+*.db-wal
+*.db-shm
+*.db.gz
+*.deletions.log
+.sentry-native/

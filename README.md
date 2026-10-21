@@ -26,11 +26,14 @@ AI-powered medical assistant for injury detection and health analysis, built wit
 16. [History, Notes, Export & Retention](#history-notes-export-retention)
 17. [API and OpenAPI](#api-and-openapi)
 18. [Database, Migrations and Backups](#database-migrations-and-backups)
-19. [Testing](#testing)
-20. [Logging & Monitoring](#logging-monitoring)
-21. [Data & Privacy](#data-privacy)
-22. [Tech Stack](#tech-stack)
-23. [Developer](#developer)
+19. [Security and Privacy](#security-and-privacy)
+20. [Languages](#languages)
+21. [Monitoring and Deployment](#monitoring-and-deployment)
+22. [Testing](#testing)
+23. [Logging & Monitoring](#logging-monitoring)
+24. [Data & Privacy](#data-privacy)
+25. [Tech Stack](#tech-stack)
+26. [Developer](#developer)
 
 ---
 
@@ -83,12 +86,15 @@ Quick-Aid/
 │   ├── web/hooks.py             # Request ids, security headers, no-store caching, regional context, maintenance trigger
 │   ├── ai/                      # Models, the triage/safety engine, prompts, telemetry, photo validation, reliability
 │   ├── core/                    # database.py, migrations.py, backup.py, history_repo.py, crypto.py, localization
+│   ├── i18n/                    # Hindi / Marathi / Kannada: UI strings, emergency guidance + detection, review status
+│   ├── observability/           # Prometheus metrics, readiness checks, privacy-safe error reporting
 │   ├── evaluation/              # Datasets, runs and the evaluation dashboard back end
 │   ├── accounts/                # Auth helpers, mail, 2FA, Google OAuth
 │   ├── static/ templates/       # Front end (css/app.css; js: app, chat, history, admin, docs)
 ├── evaluation/                  # Versioned datasets, saved runs, reference-image docs, CLI tools
-├── docs/                        # OPERATIONS.md (migrations, backups, retention), DATABASE.md (SQLite now, PostgreSQL later)
-├── tests/                       # pytest suite (mocked models only: no network)
+├── docs/                        # SECURITY.md, OPERATIONS.md, DATABASE.md, TRANSLATION_REVIEW.md
+├── scripts/                     # secret_scan.py, package_release.py (safe archives), git hook installer
+├── tests/                       # pytest suite (mocked models only: no network); tests/e2e = real-browser journeys + accessibility audit
 ├── deploy/ docker-compose.yml Dockerfile  # nginx + gunicorn, optional scheduled backups
 └── .env.example                 # every setting, documented
 ```
@@ -422,17 +428,51 @@ python -m quickaid.services.retention          # run the retention sweep now
 * **Backups are consistent snapshots** taken while the app runs (SQLite online backup API), integrity-checked, compressed, private (`0600`), checksummed, and rotated. Restore is guarded: it verifies the backup, refuses while the database is in use, and saves what it replaced. **The encryption key is not inside a backup. Store it separately,** or restored data cannot be read.
 
 ---
+## Security and Privacy
+
+The full policy, the credential-leak runbook and an honest list of limitations are in **[docs/SECURITY.md](docs/SECURITY.md)**. In short:
+
+* **Secrets never leave your machine by accident.** `.env` is git- and docker-ignored. `python scripts/secret_scan.py` checks the tree, staged changes, **full history** (`--history`) and finished archives, printing findings masked. `python scripts/package_release.py --version N` builds archives only from files git would publish (never `.env`, never `.git`) and refuses to finish if it finds a secret. Install the commit guard with `sh scripts/install_hooks.sh`.
+* **If a secret *was* committed**, rotate it at its source first, then follow the runbook (key rotation without data loss: `CHAT_ENCRYPTION_KEY_PREVIOUS` + `python -m quickaid.core.rekey`).
+* **Nothing is sent to an external AI until the person agrees.** Until then everything is handled on the server in a basic mode. When they agree, only what they typed and the photo (with location, camera and time details removed) is sent to Google Gemini, never their name, email or account details. A "no" is remembered and can be changed in Account.
+* **Sign-in hardening:** lockout that a stranger can't use to lock you out, session versioning and idle/absolute timeouts, 2FA with single-use recovery codes and replay protection, safer password reset, a password blocklist, and a "recent security activity" list on the Account page.
+* **Deletion is physical:** freed database content is zeroed, uploads are overwritten before removal, and a deletion log makes sure restoring an old backup cannot bring deleted data back.
+* **Logs are privacy-safe** (route patterns, no usernames, emails or health text, plus a redaction filter), and error reporting (optional Sentry) sends no personal data.
+
+## First aid, built in, and speed
+
+* **Everyday first aid works without AI.** Fifteen guides cover the problems people actually open the app for: cuts and scrapes, burns and scalds, nosebleeds, sprains, bruises, insect stings, animal bites, blisters, splinters, sunburn, something in the eye, a bump on the head, a suspected broken bone, heat exhaustion, and **choking**. Each gives what it probably is, ordered first-aid steps, what *not* to do, and exactly when to get it seen, and moves up to "see a doctor today" or "call the emergency number" when the description contains a danger sign (a deep cut that won't stop bleeding, a dog bite, swollen lips after a sting, a bone showing). They are standard published first-aid steps, written conservatively and **in English only**; the safety engine reviews them and can only make advice more cautious.
+* **Injuries skip the questionnaire** (it asks about fever and cough), giving the steps immediately; illnesses still get follow-up questions, and the first question appears instantly.
+* **Time limits keep results fast:** a hard per-request timeout, the model's "thinking" switched off for these structured tasks, no pointless retry after a timeout, and a total budget, then the built-in result is shown rather than an error. Settings and troubleshooting are in [docs/OPERATIONS.md](docs/OPERATIONS.md).
+
+## Languages
+
+The interface and, above all, the **emergency guidance** work in English, **हिन्दी (Hindi), मराठी (Marathi) and ಕನ್ನಡ (Kannada)**. The language follows the person's saved choice, then a cookie, then their browser; a menu on every page switches it (no JavaScript needed).
+
+* **Detecting emergencies** works in each script *and* in Roman letters (how many people type on phones): about 50 patterns across 12 warning signs plus self-harm wording, with negation ("सीने में दर्द *नहीं* है" is not an alarm), spelling variants, and clause boundaries. About 70 example phrases are tested, plus 17 everyday complaints that must **not** raise an alarm.
+* **The instructions** for every warning sign are translated with the same number of steps as English, the emergency number always inserted from a placeholder, and the key "do not" steps checked by tests. The AI model is told to write in the person's language while keeping enum values, numbers and drug names untouched.
+* **Honest limits:** **no native-speaking clinician has reviewed these translations yet**, so every translated page says so. Detailed results from the basic (no-AI) mode, and the first-aid guides on the emergency page, remain in English and are labelled as such. Text-wording safety rewrites apply to English only. See [docs/TRANSLATION_REVIEW.md](docs/TRANSLATION_REVIEW.md) for the review checklist.
+
+## Monitoring and Deployment
+
+* `/health` (liveness), `/ready` (database writable, schema current, uploads writable, disk space) and `/metrics` (Prometheus; token or admin only; route patterns and outcomes, never user data). Every response carries `X-Request-ID`, also in the logs.
+* Production container: non-root, **read-only filesystem, all capabilities dropped, no privilege escalation, resource limits**, gunicorn with recycled workers and request limits (`deploy/gunicorn.conf.py`), aggregated multi-worker metrics, and a health check. Details and an alert list in [docs/OPERATIONS.md](docs/OPERATIONS.md).
+* **CI** (`.github/workflows/ci.yml`): lint + Bandit, secret scan with full history, tests on Python 3.11 and 3.12 with a **90% coverage floor**, migrations and dataset checks, the safety evaluation gate, a real-browser job with an automated **accessibility audit**, dependency audit (`pip-audit`), and a container build that checks the image has no `.env` or `.git`, runs non-root and starts read-only. *The workflow and Dockerfile are written and validated for syntax, but could not be run in the sandbox where this was built, so expect to fix small things on first run.*
+
+---
 
 ## Testing
 
 ```bash
-pip install -r requirements-dev.txt
-pytest -v
+pytest                                    # ~1,100 tests, mocked AI only (no network), about 94% coverage
+pytest --cov=quickaid --cov-report=term-missing
+python -m playwright install chromium && npm install axe-core   # once, for the browser suite
+AXE_PATH=node_modules/axe-core/axe.min.js pytest -m browser tests/e2e   # real browser journeys + accessibility audit
+python scripts/secret_scan.py             # secrets and forbidden files
+python evaluation/run_evaluation.py --weak-model --no-write   # safety evaluation gate
 ```
 
-Tests run against an isolated temporary SQLite file and a placeholder `GEMINI_API_KEY`, so they use the basic-mode fallback and never call the real API or touch your real database. They cover sign-up validation, the password UI hooks, theme assets, the dashboard, the red-flag scanner and the AI safety nets. CI (`.github/workflows/ci.yml`) runs the suite plus `pip-audit` on every push/PR to `main` and weekly.
-
----
+What is covered end to end: registration, sign-in, 2FA and recovery, password reset, symptom and photo analysis (including AI outage, garbage model output and a model that lies about an emergency), follow-up chats, history search/notes/export/deletion, emergency handling through every entry point in four languages, access control between users, retention and physical deletion, AI consent, and, in a real browser, the dashboard, upload, history, report, language switching and an axe-core audit of every key page at three screen sizes in light and dark themes.
 
 ## Logging & Monitoring
 

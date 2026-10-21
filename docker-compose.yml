@@ -39,12 +39,27 @@ services:
       - quickaid-data:/app/data
       - quickaid-logs:/app/logs
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:5000/health', timeout=3).status == 200 else 1)"]
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:5000/ready', timeout=3).status == 200 else 1)"]
       interval: 30s
       timeout: 5s
       start_period: 10s
       retries: 3
     restart: unless-stopped
+    # Defence in depth: the container cannot write to its own filesystem except the mounted data/log volumes and tmpfs, has no Linux
+    # capabilities, cannot gain privileges, and is bounded in memory, CPU and process count (so a bug or an attack cannot take the host down).
+    init: true
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /app/uploads:uid=1000,gid=1000,mode=0700
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 768m
+    cpus: 1.5
+    pids_limit: 256
+    stop_grace_period: 40s
 
   nginx:
     image: nginx:1.27-alpine

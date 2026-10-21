@@ -1,0 +1,21 @@
+{% extends 'base.html' %}
+{% from '_macros.html' import icon %}
+{% set active_page = 'account' %}
+{% block title %}Your recovery codes{% endblock %}
+{% block content %}
+<div class="page-narrow">
+  <div class="page-head"><h1>Save your recovery codes</h1></div>
+  {% if success %}<div class="alert alert-success" role="status">{{ success }}</div>{% endif %}
+  <div class="alert alert-warn" role="alert"><strong>You will not be able to see these again.</strong> If you lose your phone, each code lets you sign in <em>once</em>. Store them somewhere safe, such as a password manager or a printout.</div>
+  <section class="panel">
+    <ul class="recovery-grid" id="recoveryCodes" aria-label="Your 10 recovery codes">{% for c in codes %}<li><code>{{ c }}</code></li>{% endfor %}</ul>
+    <div class="actions">
+      <button type="button" class="btn" data-copy="#recoveryCodes">Copy all</button>
+      <button type="button" class="btn btn-ghost" data-print>Print</button>
+      <a class="btn btn-ghost" href="/account#security">I have saved them</a>
+    </div>
+    <p class="hint">Anyone with one of these codes <em>and</em> your password can sign in, so treat them like a password. Only a one-way fingerprint of each is stored on our side.</p>
+  </section>
+</div>
+{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='js/history.js') }}" defer></script>{% endblock %}

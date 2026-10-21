@@ -162,7 +162,7 @@
       var d = r.delta == null ? 'n/a' : (r.delta > 0 ? '+' : '') + (isPct ? (r.delta * 100).toFixed(1) + ' pts' : (/cost/.test(r.metric) ? usd(r.delta) : r.delta.toFixed(0) + ' ms'));
       tb.appendChild(h('tr', {}, h('td', { text: r.label }), h('td', { class: 'num', text: f(r.a) }), h('td', { class: 'num', text: f(r.b) }), h('td', { class: 'num', text: d }), h('td', { class: 'verdict-' + r.verdict, text: r.verdict })));
     });
-    t.appendChild(tb); out.appendChild(h('div', { class: 'table-wrap' }, t));
+    t.appendChild(tb); out.appendChild(h('div', { class: 'table-wrap', tabindex: '0', role: 'region', 'aria-label': 'Scrollable table' }, t));
     var diffs = [];
     Object.keys(c.prompt_diff).forEach(function (k) { diffs.push('prompt "' + k + '": ' + (c.prompt_diff[k].a || '-') + ' → ' + (c.prompt_diff[k].b || '-')); });
     Object.keys(c.dataset_diff).forEach(function (k) { diffs.push('dataset ' + k + ': v' + (c.dataset_diff[k].a || '-') + ' → v' + (c.dataset_diff[k].b || '-')); });
@@ -213,7 +213,7 @@
       var t2 = h('table', { class: 'tbl' }, h('thead', {}, h('tr', {}, [keyLabel, 'Calls', 'API fail', 'Valid', 'p50', 'p95', 'Cost'].map(function (x) { return h('th', { text: x }); }))));
       var b2 = h('tbody');
       keys.forEach(function (k) { var o = obj[k]; b2.appendChild(h('tr', {}, h('td', { class: 'mono', text: k }), h('td', { class: 'num', text: String(o.calls) }), h('td', { class: 'num', text: pct(o.api_failure_rate) }), h('td', { class: 'num', text: pct(o.structured_output_validity) }), h('td', { class: 'num', text: ms(o.latency_ms.p50) }), h('td', { class: 'num', text: ms(o.latency_ms.p95) }), h('td', { class: 'num', text: usd(o.cost_usd) }))); });
-      t2.appendChild(b2); tb.appendChild(h('div', { class: 'table-wrap' }, t2));
+      t2.appendChild(b2); tb.appendChild(h('div', { class: 'table-wrap', tabindex: '0', role: 'region', 'aria-label': 'Scrollable table' }, t2));
     };
     group('By model (compare model versions on live traffic)', t.by_model, 'Model');
     group('By prompt version (compare prompt changes on live traffic)', t.by_prompt_version, 'Prompt hash');

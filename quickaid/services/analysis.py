@@ -15,7 +15,7 @@ from quickaid.ai.symptom_checker import SymptomChecker
 from quickaid.ai.upload_validation import validate_upload
 from quickaid.api.responses import ApiError
 from quickaid.api.validation import symptom_text
-from quickaid.core import database as db
+from quickaid.core import database as db, secure_files
 from quickaid.core.localization import get_app_region
 from quickaid.core.logging_config import get_logger
 from quickaid.services import safety
@@ -68,7 +68,7 @@ class AnalysisService:
                            hints=['If it keeps happening, try a different photo.'], detail=str(e)[:200])
         finally:
             if os.path.exists(path):              # the photo is never kept, even if analysis crashed
-                os.remove(path)
+                secure_files.secure_remove(path)
 
     # ---------------------------------------------------------------- adaptive interview
 

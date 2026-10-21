@@ -57,3 +57,34 @@ def maintenance_interval_hours() -> int:
 
 def interview_ttl_hours() -> int:
     return 24
+
+
+# ---- Sessions and sign-in protection ----
+def session_idle_minutes() -> int:
+    """Sign people out after this long without activity (sliding)."""
+    return max(5, _int_env('SESSION_IDLE_MINUTES', 60))
+
+
+def session_absolute_hours() -> int:
+    """Sign people out this long after they signed in, however active they are."""
+    return max(1, _int_env('SESSION_ABSOLUTE_HOURS', 12))
+
+
+LOCKOUT_WINDOW_SECONDS = 15 * 60
+LOGIN_MAX_FAILURES_PER_ADDRESS = 5          # wrong passwords for one account from ONE address
+LOGIN_MAX_FAILURES_PER_ACCOUNT = 25         # ...from anywhere (higher, so a stranger cannot easily lock the real owner out)
+TWOFA_MAX_FAILURES = 5
+RESET_EMAILS_PER_HOUR = 3
+PENDING_2FA_SECONDS = 10 * 60               # after the password step, how long the 2FA step stays open
+MAX_PASSWORD_LENGTH = 128                   # the hash is deliberately slow; refuse absurdly long input instead of burning CPU on it
+
+# ---- External AI consent ----
+AI_CONSENT_VERSION = 1                       # bump when the wording of what is sent to the AI provider changes: everyone is asked again
+
+
+def require_ai_consent() -> bool:
+    """When true (the default) nothing is sent to the external AI provider until the person has agreed; they get the built-in basic mode."""
+    return os.getenv('REQUIRE_AI_CONSENT', 'true').strip().lower() not in ('0', 'false', 'no', 'off')
+
+
+SUPPORTED_LANGUAGES = ('en', 'hi', 'kn', 'mr')

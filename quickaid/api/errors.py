@@ -6,6 +6,7 @@ from werkzeug.exceptions import HTTPException
 
 from quickaid.api.responses import ApiError, DEFAULT_CODES, current_request_id, fail
 from quickaid.core.logging_config import get_logger
+from quickaid.observability import metrics as obs_metrics
 
 logger = get_logger('errors')
 
@@ -57,6 +58,7 @@ def register_error_handlers(app) -> None:
 
     @app.errorhandler(Exception)
     def unexpected(e):
+        obs_metrics.UNHANDLED.inc()
         logger.error("Unhandled exception on %s %s [request %s]", request.method, request.path, current_request_id(), exc_info=True)
         if wants_json():
             return fail('An unexpected error occurred. Please try again.', 500, 'internal_error')

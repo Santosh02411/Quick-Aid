@@ -31,6 +31,17 @@
     </div>
   </header>
 
+  {% set care = full.care_level or ('emergency' if (entry.level == 'high' and entry.emergency_alert) else ('same_day' if entry.level == 'high' else ('soon' if entry.level == 'medium' else 'self_care'))) %}
+  {% set hero = {'emergency': ('high', 'js.high_title'), 'same_day': ('high', 'js.sameday_title'), 'soon': ('medium', 'js.medium_title'), 'self_care': ('low', 'js.low_title')}[care] %}
+  <div class="triage rep-hero" data-level="{{ hero[0] }}" role="status">
+    {{ icon('check' if hero[0] == 'low' else 'alert') }}
+    <div>
+      <p class="lvl">{{ t(hero[1]) }}</p>
+      {% if care == 'emergency' %}<p><a class="btn btn-danger" href="tel:{{ emergency_number }}">{{ icon('phone') }}{{ t('dash.call', number=emergency_number) }}</a></p>
+      {% elif full.timeframe %}<p>{{ full.timeframe }}</p>{% endif %}
+    </div>
+  </div>
+
   <div class="alert alert-warn rep-warn">AI-generated estimate for general information. It is <strong>not a diagnosis</strong> and can be wrong. Please see a healthcare professional. In an emergency call {{ emergency_number }}.</div>
 
   {% if full.summary %}<p class="rep-summary">{{ full.summary }}</p>{% endif %}

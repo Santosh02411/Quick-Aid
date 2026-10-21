@@ -1,6 +1,11 @@
 {% from '_macros.html' import icon %}
+{% macro lang_switch() %}
+<nav class="lang-switch" aria-label="{{ t('lang.label') }}">
+  {% for code, name in languages.items() %}<a href="/lang/{{ code }}?next={{ request.full_path|urlencode }}" lang="{{ code }}" hreflang="{{ code }}"{% if code == lang %} aria-current="true"{% endif %}>{{ name }}</a>{% endfor %}
+</nav>
+{% endmacro %}
 <!DOCTYPE html>
-<html lang="en" data-theme="light">
+<html lang="{{ lang }}" data-theme="light">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -18,10 +23,13 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500..800&family=Figtree:wght@400;500;600;700&display=swap" rel="stylesheet">
+  {% if lang in ('hi', 'mr') %}<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Devanagari:wght@400;600;700&display=swap" rel="stylesheet">{% elif lang == 'kn' %}<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Kannada:wght@400;600;700&display=swap" rel="stylesheet">{% endif %}
+  <script nonce="{{ csp_nonce() }}">window.QA_LANG = {{ lang|tojson }}; window.QA_I18N = {{ i18n_js|tojson }}; window.QA_AI = {{ ai_state|tojson }};</script>
   <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
 </head>
 <body data-emergency="{{ emergency_number }}">
-<a class="skip-link" href="#main">Skip to content</a>
+<a class="skip-link" href="#main">{{ t('a11y.skip') }}</a>
+{% if lang != 'en' %}<div class="lang-notice" role="note">{{ t('lang.notice', number=emergency_number) }}</div>{% endif %}
 
 {% block body %}
 {% set page_html %}{% block content %}{% endblock %}{% endset %}
@@ -30,25 +38,26 @@
 <div class="shell">
   <aside class="sidebar" aria-label="Main navigation">
     <a class="logo" href="/"><span class="logo-mark">{{ icon('logo') }}</span>Quick Aid</a>
-    <a class="nav-item" href="/" {% if active == 'dashboard' %}aria-current="page"{% endif %}>{{ icon('home') }}Dashboard</a>
-    <a class="nav-item" href="/#image">{{ icon('camera') }}Check an injury</a>
-    <a class="nav-item" href="/#symptoms">{{ icon('stethoscope') }}Check symptoms</a>
-    <a class="nav-item" href="/chat" {% if active == 'chat' %}aria-current="page"{% endif %}>{{ icon('chat') }}Ask Quick Aid</a>
-    <a class="nav-item" href="/history" {% if active == 'history' %}aria-current="page"{% endif %}>{{ icon('history') }}History</a>
-    <a class="nav-item" href="/account" {% if active == 'account' %}aria-current="page"{% endif %}>{{ icon('user') }}Account</a>
+    <a class="nav-item" href="/" {% if active == 'dashboard' %}aria-current="page"{% endif %}>{{ icon('home') }}{{ t('nav.dashboard') }}</a>
+    <a class="nav-item" href="/#image">{{ icon('camera') }}{{ t('nav.check_injury') }}</a>
+    <a class="nav-item" href="/#symptoms">{{ icon('stethoscope') }}{{ t('nav.check_symptoms') }}</a>
+    <a class="nav-item" href="/chat" {% if active == 'chat' %}aria-current="page"{% endif %}>{{ icon('chat') }}{{ t('nav.ask') }}</a>
+    <a class="nav-item" href="/history" {% if active == 'history' %}aria-current="page"{% endif %}>{{ icon('history') }}{{ t('nav.history') }}</a>
+    <a class="nav-item" href="/account" {% if active == 'account' %}aria-current="page"{% endif %}>{{ icon('user') }}{{ t('nav.account') }}</a>
     {% if current_user.is_admin %}<a class="nav-item" href="/admin/evaluation" {% if active == 'admin' %}aria-current="page"{% endif %}>{{ icon('shield') }}AI evaluation</a>{% endif %}
-    <a class="nav-item nav-sos" href="/emergency" {% if active == 'emergency' %}aria-current="page"{% endif %}>{{ icon('phone') }}Emergency</a>
+    <a class="nav-item nav-sos" href="/emergency" {% if active == 'emergency' %}aria-current="page"{% endif %}>{{ icon('phone') }}{{ t('nav.emergency') }}</a>
     <div class="sidebar-foot">
       <div class="user-chip">
         <span class="avatar">{{ current_user.username[:1] }}</span>
         <div style="min-width:0"><b>{{ current_user.username }}</b></div>
       </div>
-      <a class="foot-link" href="/privacy">Privacy &amp; your data</a>
+      {{ lang_switch() }}
+      <a class="foot-link" href="/privacy">{{ t('nav.privacy_data') }}</a>
       <div class="foot-actions">
         <button type="button" class="icon-btn theme-toggle" data-theme-toggle aria-label="Switch colour theme" title="Switch colour theme">{{ icon('moon', 'i-moon') }}{{ icon('sun', 'i-sun') }}</button>
         <form method="POST" action="/logout" style="flex:1;display:flex">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-          <button type="submit" class="btn btn-ghost btn-sm">{{ icon('logout') }}Log out</button>
+          <button type="submit" class="btn btn-ghost btn-sm">{{ icon('logout') }}{{ t('nav.logout') }}</button>
         </form>
       </div>
     </div>
@@ -68,12 +77,12 @@
   <main class="main" id="main">{{ page_html }}</main>
 
   <nav class="tabbar" aria-label="Quick navigation">
-    <a href="/" {% if active == 'dashboard' %}aria-current="page"{% endif %}>{{ icon('home') }}Home</a>
-    <a href="/#image">{{ icon('camera') }}Injury</a>
-    <a href="/#symptoms">{{ icon('stethoscope') }}Symptoms</a>
-    <a href="/chat" {% if active == 'chat' %}aria-current="page"{% endif %}>{{ icon('chat') }}Ask</a>
-    <a href="/history" {% if active == 'history' %}aria-current="page"{% endif %}>{{ icon('history') }}History</a>
-    <a class="sos" href="/emergency" {% if active == 'emergency' %}aria-current="page"{% endif %}>{{ icon('phone') }}SOS</a>
+    <a href="/" {% if active == 'dashboard' %}aria-current="page"{% endif %}>{{ icon('home') }}{{ t('nav.home') }}</a>
+    <a href="/#image">{{ icon('camera') }}{{ t('nav.injury') }}</a>
+    <a href="/#symptoms">{{ icon('stethoscope') }}{{ t('nav.symptoms') }}</a>
+    <a href="/chat" {% if active == 'chat' %}aria-current="page"{% endif %}>{{ icon('chat') }}{{ t('nav.ask_short') }}</a>
+    <a href="/history" {% if active == 'history' %}aria-current="page"{% endif %}>{{ icon('history') }}{{ t('nav.history') }}</a>
+    <a class="sos" href="/emergency" {% if active == 'emergency' %}aria-current="page"{% endif %}>{{ icon('phone') }}{{ t('nav.sos') }}</a>
   </nav>
 </div>
 {% else %}
@@ -81,11 +90,12 @@
   <div class="pubnav-in">
     <a class="logo" href="/"><span class="logo-mark">{{ icon('logo') }}</span>Quick Aid</a>
     <nav class="pubnav-links" aria-label="Main navigation">
-      <a class="link" href="/emergency">Emergency</a>
-      <a class="link hide-sm" href="/privacy">Privacy</a>
+      <a class="link" href="/emergency">{{ t('nav.emergency') }}</a>
+      <a class="link hide-sm" href="/privacy">{{ t('nav.privacy') }}</a>
+      {{ lang_switch() }}
       <button type="button" class="icon-btn theme-toggle" data-theme-toggle aria-label="Switch colour theme">{{ icon('moon', 'i-moon') }}{{ icon('sun', 'i-sun') }}</button>
-      <a class="link hide-sm" href="/login">Log in</a>
-      <a class="btn btn-sm" href="/register">Sign up</a>
+      <a class="link hide-sm" href="/login">{{ t('nav.login') }}</a>
+      <a class="btn btn-sm" href="/register">{{ t('nav.signup') }}</a>
     </nav>
   </div>
 </header>

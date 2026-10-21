@@ -28,7 +28,13 @@
       }).catch(function () { btn.disabled = false; });
       return;
     }
-    if (e.target.closest('[data-print]')) window.print();
+    if (e.target.closest('[data-print]')) { window.print(); return; }
+    var cp = e.target.closest('[data-copy]');
+    if (cp) {
+      var src = doc.querySelector(cp.getAttribute('data-copy'));
+      var text = Array.prototype.map.call(src.querySelectorAll('li'), function (li) { return li.textContent.trim(); }).join('\n');
+      (navigator.clipboard ? navigator.clipboard.writeText(text) : Promise.reject()).then(function () { cp.textContent = 'Copied'; }, function () { cp.textContent = 'Select and copy manually'; });
+    }
   });
 
   /* ---- personal notes ---- */

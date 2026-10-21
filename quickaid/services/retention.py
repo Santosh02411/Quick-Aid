@@ -19,7 +19,7 @@ from typing import Dict, List, Optional
 
 from quickaid import config
 from quickaid.api.responses import ApiError
-from quickaid.core import database as db, history_repo
+from quickaid.core import database as db, history_repo, secure_files
 from quickaid.core.logging_config import get_logger
 
 logger = get_logger('retention')
@@ -79,11 +79,10 @@ class RetentionService:
         for name in os.listdir(folder):
             path = os.path.join(folder, name)
             if _UPLOAD_NAME.match(name) and os.path.isfile(path) and not os.path.islink(path) and os.path.getmtime(path) < limit:
-                try:
-                    os.remove(path)
+                if secure_files.secure_remove(path):
                     removed += 1
-                except OSError:
-                    logger.warning("Could not remove leftover upload %s", name)
+                else:
+                    logger.warning("Could not remove a leftover upload")
         return removed
 
     def sweep(self, upload_folder: Optional[str] = None, now: Optional[datetime] = None) -> Dict:
@@ -99,6 +98,11 @@ class RetentionService:
                 report['analyses_purged'] += r['analyses']
                 report['chats_purged'] += r['chats']
         report['telemetry_purged'] = db.purge_telemetry(int(os.getenv('TELEMETRY_RETENTION_DAYS', '90') or 90))
+        report['security_rows_purged'] = db.purge_security_data()
+        from quickaid.core import deletions
+        deletions.prune()
+        if report['analyses_purged'] or report['chats_purged']:
+            db.scrub(vacuum=True)                 # make the retention deletions physical, not just logical
         if any(report.values()):
             logger.info("Retention sweep removed: %s", {k: v for k, v in report.items() if v})
         return report

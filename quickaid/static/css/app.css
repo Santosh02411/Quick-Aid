@@ -625,3 +625,34 @@ a.pg:hover { background: var(--surface-2); }
 .chat-items li:hover .chat-del, .chat-items li:focus-within .chat-del { opacity: 1; }
 
 .filters input[type="date"], .filters input[type="search"] { width: 100%; padding: .6em .75em; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface); color: var(--ink); font: inherit; }
+
+.recovery-grid { list-style: none; padding: 0; margin: 0 0 1rem; display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: .5rem; }
+.recovery-grid li { padding: .55rem .7rem; border: 1px dashed var(--line); border-radius: var(--radius-sm); background: var(--surface-2); text-align: center; }
+.recovery-grid code { font: 700 1.05rem ui-monospace, Menlo, Consolas, monospace; letter-spacing: .06em; }
+.inline-form { display: grid; gap: .6rem; max-width: 420px; margin: .6rem 0 1rem; }
+#security h3 { margin: 1.2rem 0 .4rem; font-size: 1rem; }
+
+.consent-card { border: 2px solid var(--brand); background: color-mix(in srgb, var(--brand) 6%, var(--surface)); margin: 0 0 1.25rem; }
+.consent-card h2 { margin-top: 0; }
+.danger-text { color: var(--danger); }
+
+/* ---------- Languages ---------- */
+.lang-switch { display: flex; flex-wrap: wrap; gap: .2rem .35rem; margin: .5rem 0; }
+.lang-switch a { padding: .25em .6em; border-radius: 99px; border: 1px solid var(--line); font-size: .82rem; text-decoration: none; color: var(--ink); line-height: 1.4; }
+.lang-switch a:hover { background: var(--surface-2); }
+.lang-switch a[aria-current="true"] { background: var(--brand); color: var(--brand-ink); border-color: var(--brand); font-weight: 700; }
+.lang-notice { background: var(--warn-soft); color: var(--warn); padding: .5rem 1rem; font-size: .88rem; text-align: center; border-bottom: 1px solid var(--line); }
+html[lang="hi"] body, html[lang="mr"] body { font-family: 'Noto Sans Devanagari', 'Mangal', 'Nirmala UI', system-ui, sans-serif; line-height: 1.7; }
+html[lang="kn"] body { font-family: 'Noto Sans Kannada', 'Tunga', 'Nirmala UI', system-ui, sans-serif; line-height: 1.75; }
+html[lang="hi"] h1, html[lang="hi"] h2, html[lang="hi"] h3, html[lang="mr"] h1, html[lang="mr"] h2, html[lang="mr"] h3,
+html[lang="kn"] h1, html[lang="kn"] h2, html[lang="kn"] h3 { font-family: inherit; letter-spacing: 0; }
+.pubnav .lang-switch { margin: 0; }
+
+.rep-hero { margin: 1rem 0; }
+.rep-hero .btn { margin-top: .4rem; }
+@media (max-width: 480px) { .page-head { flex-wrap: wrap; } .head-actions { width: 100%; } }
+
+/* WCAG AA: the emergency strip text was 4.11:1 on its pink background; this is 5.7:1. */
+[data-theme="light"] .sos-strip { color: #a82a1f; }
+.table-wrap:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+[data-theme="light"] .nav-item.nav-sos, [data-theme="light"] .tabbar a.sos { color: #a82a1f; }

@@ -22,3 +22,7 @@ cryptography==46.0.6
 # Optional: only needed if RATELIMIT_STORAGE_URI is pointed at Redis for
 # multi-worker/multi-instance rate limiting (see .env.example).
 redis==5.0.8
+
+# Monitoring and error reporting. Metrics are always available; Sentry only runs if SENTRY_DSN is set (and then sends no personal data).
+prometheus-client==0.26.0
+sentry-sdk==2.72.0

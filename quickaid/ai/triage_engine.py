@@ -30,6 +30,8 @@ from dataclasses import dataclass, field
 from typing import Dict, Iterable, List, Optional, Tuple
 
 from quickaid.ai import reliability
+from quickaid import i18n
+from quickaid.i18n import emergency as i18n_emergency
 from quickaid.core.localization import localize_text
 
 ENGINE_VERSION = 2
@@ -232,6 +234,12 @@ def scan(text: Optional[str]) -> Signals:
                 sig.soon.append(label)
                 break
     sig.crisis = bool(CRISIS_PATTERN.search(t))
+    # Hindi / Marathi / Kannada, in their own scripts and typed in English letters. Same labels, so everything downstream is unchanged.
+    extra, extra_crisis = i18n_emergency.detect(text or '')
+    for label in extra:
+        if label not in sig.emergency:
+            sig.emergency.append(label)
+    sig.crisis = sig.crisis or extra_crisis
     return sig
 
 
@@ -313,45 +321,82 @@ EMERGENCY_MESSAGE = 'EMERGENCY SYMPTOMS DETECTED - SEEK IMMEDIATE MEDICAL ATTENT
 EMERGENCY_ACTION = f'Call {N} or go to the nearest emergency room immediately'
 
 
-def build_emergency(reasons: List[str], region: str, crisis: bool = False) -> Dict:
-    """Localised emergency guidance: {'reasons', 'headline', 'steps', 'crisis_support'}."""
+def _lang() -> str:
+    return i18n.current()
+
+
+def emergency_message(lang: Optional[str] = None) -> str:
+    tx = i18n_emergency.TEXT.get(lang or _lang())
+    return tx['message'] if tx else EMERGENCY_MESSAGE
+
+
+def emergency_action(region: str, lang: Optional[str] = None) -> str:
+    tx = i18n_emergency.TEXT.get(lang or _lang())
+    return localize_text(tx['action'] if tx else EMERGENCY_ACTION, region)
+
+
+def crisis_support_text(region: str, lang: Optional[str] = None) -> str:
+    lang = lang or _lang()
+    if lang in i18n_emergency.LANGS:
+        table = i18n_emergency.CRISIS_SUPPORT_IN if region == 'IN' else i18n_emergency.CRISIS_SUPPORT_OTHER
+        return localize_text(table[lang], region)
+    return localize_text(CRISIS_SUPPORT.get(region, CRISIS_SUPPORT['DEFAULT']), region)
+
+
+def label_for(label: str, lang: Optional[str] = None) -> str:
+    """The warning-sign name in the person's language (English labels stay the internal keys)."""
+    return i18n_emergency.LABELS.get(lang or _lang(), {}).get(label, label)
+
+
+def build_emergency(reasons: List[str], region: str, crisis: bool = False, lang: Optional[str] = None) -> Dict:
+    """Localised emergency guidance: {'reasons', 'headline', 'steps', 'crisis_support'} in the current language (English by default)."""
+    lang = lang or _lang()
+    translated = lang in i18n_emergency.LANGS
     steps: List[str] = []
+    opener_added = False
     for label in reasons:
-        for step in GUIDANCE.get(label, []):
+        label_steps = (i18n_emergency.GUIDANCE[lang].get(label) if translated else None) or GUIDANCE.get(label, [])
+        for i, step in enumerate(label_steps):
             # Several warning signs share the same "Call N now" opener: say it once.
-            if step in steps or (step.startswith(f'Call {N}') and any(x.startswith(f'Call {N}') for x in steps)):
+            if step in steps or (i == 0 and opener_added):
                 continue
+            if i == 0:
+                opener_added = True
             steps.append(step)
     if not steps and not crisis:
-        steps = list(DEFAULT_STEPS)
+        steps = list(i18n_emergency.DEFAULT_STEPS[lang] if translated else DEFAULT_STEPS)
     support = None
     if crisis:
-        support = localize_text(CRISIS_SUPPORT.get(region, CRISIS_SUPPORT['DEFAULT']), region)
+        support = crisis_support_text(region, lang)
         if not reasons:
-            steps = [f'Call {N} if you are in immediate danger.', 'Stay with someone you trust, or ask someone to stay with you.',
-                     'Move anything you could use to hurt yourself out of reach.']
-    return {'reasons': list(reasons) + (['Thoughts of self-harm'] if crisis and not reasons else []),
-            'headline': 'This could be an emergency',
+            steps = list(i18n_emergency.CRISIS_STEPS[lang]) if translated else [
+                f'Call {N} if you are in immediate danger.', 'Stay with someone you trust, or ask someone to stay with you.',
+                'Move anything you could use to hurt yourself out of reach.']
+    shown = list(reasons) + (['Thoughts of self-harm'] if crisis and not reasons else [])
+    return {'reasons': [label_for(r, lang) for r in shown] if translated else shown,
+            'headline': i18n_emergency.TEXT[lang]['headline'] if translated else 'This could be an emergency',
             'steps': [localize_text(s, region) for s in steps], 'crisis_support': support}
 
 
 def emergency_analysis(reasons: List[str], region: str, crisis: bool, summary: str, kind: str = 'symptom') -> Dict:
     """Immediate-guidance result shaped like a normal analysis, so it renders and saves like one."""
-    info = build_emergency(reasons, region, crisis)
+    lang = _lang()
+    tx = i18n_emergency.TEXT.get(lang)
+    info = build_emergency(reasons, region, crisis, lang)
     recs = list(info['steps'])
     if info['crisis_support']:
         recs.insert(0, info['crisis_support'])
     result = {
-        'summary': summary, 'detected_symptoms': [], 'possible_conditions': [], 'possible_explanations': [],
+        'summary': tx['summary'] if tx else summary, 'detected_symptoms': [], 'possible_conditions': [], 'possible_explanations': [],
         'reported': {'symptoms': [], 'details': []},
-        'urgency_level': 'high', 'care_level': 'emergency', 'timeframe': 'Right now',
-        'emergency_alert': {'alert': True, 'message': EMERGENCY_MESSAGE, 'action': localize_text(EMERGENCY_ACTION, region),
+        'urgency_level': 'high', 'care_level': 'emergency', 'timeframe': tx['timeframe'] if tx else 'Right now',
+        'emergency_alert': {'alert': True, 'message': emergency_message(lang), 'action': emergency_action(region, lang),
                             'reason': '; '.join(info['reasons'])},
         'red_flags_present': info['reasons'], 'red_flags': info['reasons'],
-        'recommendations': recs, 'avoid': ['Do not wait to see whether it gets better', 'Do not drive yourself'],
+        'recommendations': recs, 'avoid': list(tx['avoid']) if tx else ['Do not wait to see whether it gets better', 'Do not drive yourself'],
         'see_doctor_when': [], 'information_gaps': [], 'safety_tips': [],
         'analysis_mode': 'rules', 'assessment_status': 'complete', 'interview_stopped_early': True,
-        'disclaimer': 'Emergency guidance only. It is not a diagnosis. Call emergency services.',
+        'disclaimer': tx['disclaimer'] if tx else 'Emergency guidance only. It is not a diagnosis. Call emergency services.',
     }
     result['reliability'] = {'level': 'good', 'label': 'Act first', 'reasons': ['A warning sign was reported, so guidance is given immediately without further questions.'],
                              'note': reliability.NOTE}
@@ -367,7 +412,15 @@ def immediate_emergency(text: str, region: str, summary: str) -> Optional[Dict]:
     """If the text contains an emergency or self-harm signal, return ready-made guidance; else None."""
     sig = scan(text)
     if sig.any_emergency:
-        return emergency_analysis(sig.emergency, region, sig.crisis, summary)
+        result = emergency_analysis(sig.emergency, region, sig.crisis, summary)
+        from quickaid.ai import first_aid                    # a specific guide (choking) outranks the generic guidance for the label it overlaps with
+        emergency_guides = [g for g in first_aid.match(text) if g.care_for(text)[0] == 'emergency']
+        if emergency_guides and _lang() == 'en':
+            first_aid.apply(result, emergency_guides, text, lambda s: localize_text(s, region))
+            result.pop('_first_aid_count', None)
+            result.pop('_replace_generic_emergency_steps', None)
+            result['summary'] = summary or result['summary']
+        return result
     return None
 
 
@@ -732,6 +785,8 @@ class TriageEngine:
         Returns a NEW dict. Safe to call twice (it only ever raises urgency).
         """
         r = copy.deepcopy(result)
+        first_aid_count = int(r.pop('_first_aid_count', 0) or 0)
+        replace_generic = bool(r.pop('_replace_generic_emergency_steps', False))
         self._shape_symptom(r)
         checks = ['schema_shape', 'emergency_scan', 'model_output_scan', 'serious_condition_check', 'language_check', 'medication_advice_check']
         original = r['urgency_level']
@@ -762,19 +817,26 @@ class TriageEngine:
             reasons = sig.emergency or [f.reason for f in floors if f.emergency][:2] or ([alert['reason']] if alert.get('reason') else [])
             labels = [x for x in reasons if x in GUIDANCE]
             info = build_emergency(labels or [], region, crisis=sig.crisis)
-            alert.update({'alert': True, 'message': EMERGENCY_MESSAGE, 'action': localize_text(EMERGENCY_ACTION, region)})
+            alert.update({'alert': True, 'message': emergency_message(), 'action': emergency_action(region)})
             alert['reason'] = alert.get('reason') or '; '.join(reasons or info['reasons'])
-            steps = ([info['crisis_support']] if info['crisis_support'] else []) + info['steps']
+            # Show WHICH warning sign the safety rules found, in the person's language, even when the model did not list it itself.
+            r['red_flags_present'] = list(dict.fromkeys(list(r.get('red_flags_present') or []) + [label_for(x) for x in reasons]))
+            generic = info['steps']
+            if replace_generic:
+                # A specific first-aid guide (choking) outranks the generic guidance for the label it overlaps with. In English the guide's own first step is
+                # the call line; in other languages keep the translated call line, then the guide's steps.
+                generic = [] if i18n.current() == 'en' else info['steps'][:1]
+            steps = ([info['crisis_support']] if info['crisis_support'] else []) + generic
             r['recommendations'] = [s for s in steps if s] + [x for x in r['recommendations'] if x not in steps]
             adjustments.append('Emergency guidance added because a warning sign was detected.') if not model_emergency else None
         else:
             alert.update({'alert': False, 'message': '', 'action': '', 'reason': ''})
             # the original advice may talk about the ER while the engine's care level is "see a doctor": keep them consistent
             if mode in ('basic', 'rules'):
-                self._align_basic_recommendations(r, care, r['timeframe'], region)
+                self._align_basic_recommendations(r, care, r['timeframe'], region, first_aid_count)
 
         if sig.crisis:
-            support = localize_text(CRISIS_SUPPORT.get(region, CRISIS_SUPPORT['DEFAULT']), region)
+            support = crisis_support_text(region)
             if support not in r['recommendations']:
                 r['recommendations'].insert(0, support)
 
@@ -827,7 +889,7 @@ class TriageEngine:
         return r
 
     @staticmethod
-    def _align_basic_recommendations(r: Dict, care: str, tf: str, region: str) -> None:
+    def _align_basic_recommendations(r: Dict, care: str, tf: str, region: str, first_aid_count: int = 0) -> None:
         """Rule-based advice was written per symptom; make it agree with the final care level."""
         n = localize_text(N, region)
         drop = ('See a doctor within 24 hours', 'Seek care sooner if symptoms get worse', 'SEEK IMMEDIATE', 'Call ', 'Do not delay care')
@@ -835,7 +897,16 @@ class TriageEngine:
         lead = {'soon': [f'See a doctor: {tf[0].lower() + tf[1:]}', 'Go sooner if it gets worse'],
                 'same_day': ['Get seen by a doctor today', f'Go to the emergency department or call {n} if it gets worse or you feel unsafe'],
                 'self_care': []}.get(care, [])
-        r['recommendations'] = lead + [x for x in kept if x not in lead]
+        rest = [x for x in kept if x not in lead]
+        if care in ('soon', 'self_care'):
+            # Practical first aid / self-care comes FIRST; "see a doctor" and its timing follow it (the banner above already states the urgency).
+            head = rest[:5]
+            r['recommendations'] = head + lead + rest[5:]
+        elif care == 'same_day' and first_aid_count:
+            # "Get seen today" is stated in the banner; the time-critical first-aid steps (e.g. wash a bite for 15 minutes) go first, then the instruction.
+            r['recommendations'] = rest[:3] + lead + rest[3:]
+        else:
+            r['recommendations'] = lead + rest              # urgent: the instruction to get seen leads
 
     @staticmethod
     def _finish(r: Dict, mode: str) -> None:

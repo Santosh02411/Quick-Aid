@@ -37,6 +37,23 @@ def verify_code(secret: str, code: str) -> bool:
         return False
 
 
+def verify_code_step(secret: str, code: str, now: float = None):
+    """Like verify_code, but returns the matching 30-second time-step (or None), so a code can be accepted only ONCE."""
+    import hmac
+    import time
+    if not secret or not code:
+        return None
+    code = code.strip().replace(' ', '')
+    if not code.isdigit() or len(code) != 6:
+        return None
+    totp = pyotp.TOTP(secret)
+    current = int((now if now is not None else time.time()) // totp.interval)
+    for step in (current, current - 1, current + 1):                  # this window first, then one step of clock drift either way
+        if hmac.compare_digest(totp.at(step * totp.interval), code):
+            return step
+    return None
+
+
 def qr_code_data_uri(uri: str) -> str:
     """Render the provisioning URI as a PNG QR code, inlined as a data: URI."""
     img = qrcode.make(uri)

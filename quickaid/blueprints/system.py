@@ -1,11 +1,17 @@
 """Health, regions and the API documentation."""
 
-from flask import Blueprint
+from flask import Blueprint, abort, redirect, request
 from flask_login import current_user, login_required
 
+import hmac
+import os as _os
+from flask import Response, current_app
 from quickaid.api.openapi import build_spec, doc
+from quickaid.observability import metrics as obs_metrics, readiness
 from quickaid.api.responses import ApiError, ok
-from quickaid.api.validation import json_object
+from quickaid import i18n
+from quickaid.api.schemas import LanguageBody
+from quickaid.api.validation import json_object, parse_model
 from quickaid.core import database as db
 from quickaid.core.localization import REGIONS
 from quickaid.core.logging_config import get_logger
@@ -74,3 +80,71 @@ def _require_docs_access():
     from flask import abort
     if os.getenv('API_DOCS_PUBLIC', 'false').lower() not in ('1', 'true', 'yes') and not getattr(current_user, 'is_admin', False):
         abort(404)
+
+
+def _safe_next(path):
+    """Only ever redirect back to a path on THIS site (never //evil.example or a full URL)."""
+    if path and path.startswith('/') and not path.startswith('//') and '\\' not in path and '\n' not in path and '\r' not in path:
+        return path
+    return '/'
+
+
+def _remember_language(response, code):
+    response.set_cookie(i18n.COOKIE_NAME, code, max_age=365 * 24 * 3600, samesite='Lax', secure=request.is_secure, httponly=True)
+    if current_user.is_authenticated:
+        db.set_user_language(int(current_user.id), code)
+    return response
+
+
+@bp.route('/lang/<code>')
+def switch_language(code):
+    """Works without JavaScript: a plain link in the language menu. Remembers the choice in a cookie (and on the account when signed in)."""
+    norm = i18n.normalize_code(code)
+    if norm is None or norm != code.lower():
+        abort(404)
+    return _remember_language(redirect(_safe_next(request.args.get('next'))), norm)
+
+
+@bp.route('/api/language', methods=['PUT'])
+@limiter.limit("30 per minute")
+@doc('Choose the display language', tags=['Account'], auth=False, request='LanguageBody',
+     description='Remembers the choice in a cookie, and on your account when signed in. Translated safety text is not yet clinician-reviewed.')
+def set_language_api():
+    code = parse_model(LanguageBody, json_object()).language
+    resp, _ = ok({'language': code})
+    return _remember_language(resp, code)
+
+
+@bp.route('/ready')
+@doc('Readiness: can this instance do its job right now?', tags=['System'], auth=False, responses={200: 'Ready', 503: 'Not ready'},
+     description='Checks that the database is writable and migrated, photos can be written, and there is disk space. Use for load-balancer readiness.')
+def ready():
+    ok_all, checks = readiness.check(current_app.config['UPLOAD_FOLDER'], int(_os.getenv('MIN_FREE_DISK_MB', '100') or 100))
+    resp, _ = ok({'status': 'ready' if ok_all else 'not_ready', 'checks': checks})
+    return resp, (200 if ok_all else 503)
+
+
+def _metrics_allowed() -> bool:
+    """METRICS_TOKEN (bearer) for scrapers, or an admin session. Anyone else gets a plain 404, so the endpoint's existence is not revealed."""
+    token = _os.getenv('METRICS_TOKEN', '').strip()
+    if token and hmac.compare_digest(request.headers.get('Authorization', ''), f'Bearer {token}'):
+        return True
+    return bool(current_user.is_authenticated and getattr(current_user, 'is_admin', False))
+
+
+@bp.route('/metrics')
+@doc('Prometheus metrics', tags=['System'], admin=True, hidden=True)
+def metrics_endpoint():
+    if not _metrics_allowed():
+        abort(404)
+    from quickaid.core import database, history_repo, migrations
+    from datetime import datetime, timezone
+    gauges = {'quickaid_uptime_seconds': round(__import__('time').time() - obs_metrics.STARTED, 1), 'quickaid_schema_version': migrations.status(database.DB_PATH)['current']}
+    last = history_repo.last_maintenance('sweep')
+    if last:
+        gauges['quickaid_last_maintenance_age_seconds'] = round((datetime.now(timezone.utc) - datetime.fromisoformat(last)).total_seconds(), 1)
+    try:
+        gauges['quickaid_database_bytes'] = _os.path.getsize(database.DB_PATH)
+    except OSError:
+        pass
+    return Response(obs_metrics.render(gauges), mimetype=obs_metrics.CONTENT_TYPE)

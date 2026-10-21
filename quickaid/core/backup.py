@@ -62,7 +62,7 @@ def _inspect(db_file: str) -> Dict:
         if fk:
             raise ValueError(f'foreign_key_check found {len(fk)} orphaned row(s)')
         tables = [r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name")]
-        counts = {t: conn.execute(f'SELECT COUNT(*) FROM "{t}"').fetchone()[0] for t in tables}
+        counts = {t: conn.execute('SELECT COUNT(*) FROM "%s"' % t.replace('"', '""')).fetchone()[0] for t in tables}  # nosec B608: identifiers come from a fixed allow-list in this module; every value is a bound parameter
         version = 0
         if 'schema_migrations' in tables:
             version = conn.execute('SELECT COALESCE(MAX(version), 0) FROM schema_migrations').fetchone()[0]
@@ -192,8 +192,14 @@ def restore_backup(backup_path: str, db_path: str, force: bool = False) -> Dict:
     for suffix in ('-wal', '-shm'):                              # stale journal files from the old database must not be replayed
         if os.path.exists(db_path + suffix):
             os.remove(db_path + suffix)
+    # Bring an older backup up to the current schema, then re-apply every deletion made since it was taken. Without this a restore
+    # would silently resurrect entries and accounts that people deleted.
+    from quickaid.core import deletions, migrations
+    migrations.migrate(db_path, backup=False)
+    replayed = deletions.replay(db_path)
     logger.warning("Database restored from %s", os.path.basename(backup_path))
-    return {'restored_from': os.path.basename(backup_path), 'previous_database_saved_as': saved['file'] if saved else None, **_inspect(db_path)}
+    return {'restored_from': os.path.basename(backup_path), 'previous_database_saved_as': saved['file'] if saved else None,
+            'deletions_reapplied': replayed, **_inspect(db_path)}
 
 
 def main(argv=None) -> int:

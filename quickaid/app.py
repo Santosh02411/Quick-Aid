@@ -15,6 +15,7 @@ Everything is built per app instance, so tests (and any future worker) get isola
 
 import os
 import secrets
+from datetime import timedelta
 
 from flask import Flask
 from werkzeug.middleware.proxy_fix import ProxyFix
@@ -24,11 +25,13 @@ from quickaid.accounts.oauth import init_oauth
 from quickaid.ai import telemetry
 from quickaid.api.errors import register_error_handlers
 from quickaid.blueprints import register_blueprints
+from quickaid import config
 from quickaid.config import MAX_UPLOAD_BYTES
 from quickaid.core import database as db
 from quickaid.core.logging_config import get_logger
 from quickaid.extensions import RATELIMIT_STORAGE_URI, csrf, limiter, login_manager
 from quickaid.services.container import build_services
+from quickaid.observability import errors as error_reporting, metrics as obs_metrics
 from quickaid.web.hooks import register_hooks
 
 logger = get_logger('app')
@@ -53,13 +56,19 @@ def create_app() -> Flask:
         app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_port=1)
         logger.info("BEHIND_PROXY enabled - trusting one hop of X-Forwarded-* headers.")
 
+    app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(minutes=config.session_idle_minutes())   # sliding idle timeout (cookie expiry)
     app.config['SESSION_COOKIE_HTTPONLY'] = True
     app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
     app.config['SESSION_COOKIE_SECURE'] = os.getenv('SESSION_COOKIE_SECURE', 'False').lower() in ('1', 'true', 'yes')
+    if app.config['SESSION_COOKIE_SECURE']:
+        app.config['SESSION_COOKIE_NAME'] = '__Host-quickaid'      # the __Host- prefix makes browsers refuse it unless Secure, Path=/, and no Domain
     if not app.config['SESSION_COOKIE_SECURE']:
         logger.info("SESSION_COOKIE_SECURE is off - fine for local plain-HTTP dev; any real deployment should set it True.")
     app.config.setdefault('WTF_CSRF_ENABLED', True)
+    app.config['WTF_CSRF_TIME_LIMIT'] = 8 * 3600       # a token is valid for a working day, not forever
 
+    app.extensions['quickaid_services'] = build_services()
+    register_hooks(app)              # FIRST: request id and CSP nonce must exist even for requests the CSRF check rejects
     csrf.init_app(app)               # every state-changing request needs a token (form field or X-CSRFToken header)
     login_manager.init_app(app)
     init_oauth(app)                  # Google sign-in only registers if GOOGLE_CLIENT_ID/SECRET are set
@@ -69,14 +78,14 @@ def create_app() -> Flask:
         logger.warning("Rate limiter using in-memory storage - limits are per-process only. Set RATELIMIT_STORAGE_URI (e.g. a Redis URL) "
                        "before running more than one worker/instance.")
 
-    app.extensions['quickaid_services'] = build_services()
-    register_hooks(app)
     register_error_handlers(app)
     register_blueprints(app)
 
     os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
     db.init_db()                     # versioned migrations; backs up first when upgrading a database that holds data
     telemetry.install_db_sink()
+    telemetry.add_sink(obs_metrics.SINK)
+    error_reporting.init()           # only if SENTRY_DSN is set; sends no personal data
     return app
 
 

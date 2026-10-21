@@ -24,7 +24,8 @@ from google import genai
 from google.genai import types
 from google.genai.types import Content, Part
 
-from quickaid.ai import telemetry
+from quickaid.i18n import prompts as language_prompts
+from quickaid.ai import model_calls, consent, telemetry
 from quickaid.ai.triage_engine import build_emergency, engine as triage, scan
 from quickaid.core.localization import DEFAULT_REGION, get_app_region, localize_text, prompt_context
 from quickaid.core.logging_config import get_logger
@@ -112,7 +113,7 @@ class ConversationService:
             return {'answer': self._format_emergency(info), 'flagged': True, 'mode': 'emergency', 'emergency': info}
 
         # 2. No Gemini: rule-based answer from the stored analysis.
-        if not self.use_gemini:
+        if not (self.use_gemini and consent.external_allowed()):
             return {'answer': self._basic_reply(analysis_summary, question, region), 'flagged': False,
                     'mode': 'basic', 'emergency': None}
 
@@ -131,9 +132,10 @@ class ConversationService:
                     model=MODEL_NAME,
                     contents=contents,
                     config=types.GenerateContentConfig(
-                        system_instruction=CHAT_SYSTEM_INSTRUCTION + "\n\n" + context,
+                        system_instruction=CHAT_SYSTEM_INSTRUCTION + language_prompts.note() + "\n\n" + context,
                         temperature=0.3,
                         max_output_tokens=700,
+                        **model_calls.speed_kwargs(MODEL_NAME),
                     ),
                 )
                 tcall.api_done(response)
@@ -239,7 +241,7 @@ class ConversationService:
     def ask_follow_up(self, analysis_type: str, analysis_summary: str, history: List[Dict],
                       question: str, region: str = DEFAULT_REGION) -> str:
         """Single-string API used by older callers. New code should use reply()."""
-        if not self.use_gemini:
+        if not (self.use_gemini and consent.external_allowed()):
             return NO_GEMINI_MESSAGE
         try:
             contents: List[Content] = [

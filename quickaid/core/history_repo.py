@@ -57,7 +57,7 @@ def _union(user_id, types, urgencies, emergency, date_from, date_to):
     parts, params = [], []
     for t in types:
         where, p = _where(user_id, urgencies, emergency, date_from, date_to, URGENCY_COLUMN[t])
-        parts.append(f"SELECT '{t}' AS type, id, created_at, {URGENCY_COLUMN[t]} AS urgency, emergency_alert AS emergency "
+        parts.append(f"SELECT '{t}' AS type, id, created_at, {URGENCY_COLUMN[t]} AS urgency, emergency_alert AS emergency "  # nosec B608: identifiers come from a fixed allow-list in this module; every value is a bound parameter
                      f"FROM {TABLES[t]} WHERE {where}")
         params += p
     return ' UNION ALL '.join(parts), params
@@ -77,7 +77,7 @@ def _load_rows(conn, keys: List[Dict]) -> List[Dict]:
     for t, fn in (('image', database._row_to_image_dict), ('symptom', database._row_to_symptom_dict)):
         ids = [k['id'] for k in keys if k['type'] == t]
         if ids:
-            for r in conn.execute(f"SELECT * FROM {TABLES[t]} WHERE id IN ({','.join('?' * len(ids))})", ids):
+            for r in conn.execute(f"SELECT * FROM {TABLES[t]} WHERE id IN ({','.join('?' * len(ids))})", ids):  # nosec B608: identifiers come from a fixed allow-list in this module; every value is a bound parameter
                 out[(t, r['id'])] = fn(r)
     return [out[(k['type'], k['id'])] for k in keys if (k['type'], k['id']) in out]
 
@@ -103,17 +103,17 @@ def search_history(user_id: int, q: Optional[str] = None, types: Optional[Sequen
 
     with database.get_connection() as conn:
         if not terms:
-            total = conn.execute(f'SELECT COUNT(*) FROM ({union})', params).fetchone()[0]
-            keys = [dict(r) for r in conn.execute(f'SELECT type, id FROM ({union}) ORDER BY {_order(sort)} LIMIT ? OFFSET ?',
+            total = conn.execute(f'SELECT COUNT(*) FROM ({union})', params).fetchone()[0]  # nosec B608: identifiers come from a fixed allow-list in this module; every value is a bound parameter
+            keys = [dict(r) for r in conn.execute(f'SELECT type, id FROM ({union}) ORDER BY {_order(sort)} LIMIT ? OFFSET ?',  # nosec B608: identifiers come from a fixed allow-list in this module; every value is a bound parameter
                                                   params + [per_page, (page - 1) * per_page])]
             items = _load_rows(conn, keys)
         else:
-            keys = [dict(r) for r in conn.execute(f'SELECT type, id, created_at, urgency FROM ({union}) ORDER BY {_order(sort)} LIMIT ?',
+            keys = [dict(r) for r in conn.execute(f'SELECT type, id, created_at, urgency FROM ({union}) ORDER BY {_order(sort)} LIMIT ?',  # nosec B608: identifiers come from a fixed allow-list in this module; every value is a bound parameter
                                                   params + [MAX_SCAN])]
             candidates = _load_rows(conn, keys)
             notes = {}
             for t in types:
-                for r in conn.execute(f'SELECT id, notes FROM {TABLES[t]} WHERE user_id = ? AND notes IS NOT NULL', (user_id,)):
+                for r in conn.execute(f'SELECT id, notes FROM {TABLES[t]} WHERE user_id = ? AND notes IS NOT NULL', (user_id,)):  # nosec B608: identifiers come from a fixed allow-list in this module; every value is a bound parameter
                     notes[(t, r['id'])] = crypto.decrypt(r['notes'])
             hits = [e for e in candidates if all(w in _haystack(e, notes.get((e['type'], e['id']), '')) for w in terms)]
             total = len(hits)
@@ -127,7 +127,7 @@ def get_entry(user_id: int, entry_type: str, entry_id: int) -> Optional[Dict]:
         return None
     table = TABLES[entry_type]
     with database.get_connection() as conn:
-        row = conn.execute(f'SELECT * FROM {table} WHERE id = ? AND user_id = ?', (entry_id, user_id)).fetchone()
+        row = conn.execute(f'SELECT * FROM {table} WHERE id = ? AND user_id = ?', (entry_id, user_id)).fetchone()  # nosec B608: identifiers come from a fixed allow-list in this module; every value is a bound parameter
         if not row:
             return None
         entry = (database._row_to_image_dict if entry_type == 'image' else database._row_to_symptom_dict)(row)
@@ -155,7 +155,7 @@ def set_notes(user_id: int, entry_type: str, entry_id: int, notes: str) -> bool:
     notes = (notes or '').strip()[:MAX_NOTES_LENGTH]
     stamp = datetime.now(timezone.utc).isoformat()
     with database.get_connection() as conn:
-        cur = conn.execute(f'UPDATE {TABLES[entry_type]} SET notes = ?, notes_updated_at = ? WHERE id = ? AND user_id = ?',
+        cur = conn.execute(f'UPDATE {TABLES[entry_type]} SET notes = ?, notes_updated_at = ? WHERE id = ? AND user_id = ?',  # nosec B608: identifiers come from a fixed allow-list in this module; every value is a bound parameter
                            (crypto.encrypt(notes) if notes else None, stamp if notes else None, entry_id, user_id))
         return cur.rowcount > 0
 
@@ -165,16 +165,18 @@ def delete_entry(user_id: int, entry_type: str, entry_id: int) -> bool:
     if entry_type not in TABLES:
         return False
     with database.transaction() as conn:
-        cur = conn.execute(f'DELETE FROM {TABLES[entry_type]} WHERE id = ? AND user_id = ?', (entry_id, user_id))
+        cur = conn.execute(f'DELETE FROM {TABLES[entry_type]} WHERE id = ? AND user_id = ?', (entry_id, user_id))  # nosec B608: identifiers come from a fixed allow-list in this module; every value is a bound parameter
         if cur.rowcount == 0:
             return False
         conn.execute('DELETE FROM chat_conversations WHERE user_id = ? AND source_type = ? AND source_id = ?', (user_id, entry_type, entry_id))
+    from quickaid.core import deletions
+    deletions.record('entry', user_id=user_id, kind=entry_type, id=entry_id)       # a restored backup must not resurrect it
     return True
 
 
 def count_entries(user_id: int) -> Dict[str, int]:
     with database.get_connection() as conn:
-        return {t: conn.execute(f'SELECT COUNT(*) FROM {tbl} WHERE user_id = ?', (user_id,)).fetchone()[0] for t, tbl in TABLES.items()}
+        return {t: conn.execute(f'SELECT COUNT(*) FROM {tbl} WHERE user_id = ?', (user_id,)).fetchone()[0] for t, tbl in TABLES.items()}  # nosec B608: identifiers come from a fixed allow-list in this module; every value is a bound parameter
 
 
 def search_conversations(user_id: int, q: Optional[str] = None, page: int = 1, per_page: int = 20) -> Dict:
@@ -205,7 +207,7 @@ def export_user_data(user_id: int) -> Dict:
         user = conn.execute('SELECT username, email, region, retention_days, created_at FROM users WHERE id = ?', (user_id,)).fetchone()
         entries = []
         for t in TABLES:
-            for r in conn.execute(f'SELECT id FROM {TABLES[t]} WHERE user_id = ? ORDER BY created_at', (user_id,)).fetchall():
+            for r in conn.execute(f'SELECT id FROM {TABLES[t]} WHERE user_id = ? ORDER BY created_at', (user_id,)).fetchall():  # nosec B608: identifiers come from a fixed allow-list in this module; every value is a bound parameter
                 entries.append(r['id'] and (t, r['id']))
         convs = conn.execute('SELECT * FROM chat_conversations WHERE user_id = ? ORDER BY created_at', (user_id,)).fetchall()
         chats = []
@@ -246,11 +248,11 @@ def purge_older_than(user_id: int, cutoff_iso: str) -> Dict[str, int]:
     with database.transaction() as conn:
         n = 0
         for t, tbl in TABLES.items():
-            old = [r['id'] for r in conn.execute(f'SELECT id FROM {tbl} WHERE user_id = ? AND created_at < ?', (user_id, cutoff_iso))]
+            old = [r['id'] for r in conn.execute(f'SELECT id FROM {tbl} WHERE user_id = ? AND created_at < ?', (user_id, cutoff_iso))]  # nosec B608: identifiers come from a fixed allow-list in this module; every value is a bound parameter
             for i in old:
                 conn.execute('DELETE FROM chat_conversations WHERE user_id = ? AND source_type = ? AND source_id = ?', (user_id, t, i))
             if old:
-                n += conn.execute(f'DELETE FROM {tbl} WHERE user_id = ? AND created_at < ?', (user_id, cutoff_iso)).rowcount
+                n += conn.execute(f'DELETE FROM {tbl} WHERE user_id = ? AND created_at < ?', (user_id, cutoff_iso)).rowcount  # nosec B608: identifiers come from a fixed allow-list in this module; every value is a bound parameter
         chats = conn.execute('DELETE FROM chat_conversations WHERE user_id = ? AND updated_at < ?', (user_id, cutoff_iso)).rowcount
     return {'analyses': n, 'chats': chats}
 

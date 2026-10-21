@@ -28,7 +28,8 @@ from google import genai
 from google.genai import types
 from PIL import Image, ImageOps
 
-from quickaid.ai import image_quality, telemetry
+from quickaid.i18n import prompts as language_prompts
+from quickaid.ai import model_calls, consent, image_quality, telemetry
 from quickaid.ai.schemas import ImageAssessment, validate_response
 from quickaid.ai.triage_engine import engine as triage
 from quickaid.core.localization import get_app_region, localize_text
@@ -97,7 +98,7 @@ class MedicalAnalyzer:
             if quality['unusable']:
                 logger.info("Image unusable (%s); skipping the model", '; '.join(quality['issues']))
                 return triage.insufficient_image(quality, region)
-            if self.use_gemini:
+            if self.use_gemini and consent.external_allowed():
                 return self._analyze_with_gemini(image_path, image=image, quality=quality)
             return self._analyze_basic(image_path, image=image, quality=quality)
         except Exception as e:
@@ -124,7 +125,9 @@ class MedicalAnalyzer:
                 im = im.convert('RGB')
             if max(im.size) > MAX_IMAGE_SIDE:
                 im.thumbnail((MAX_IMAGE_SIDE, MAX_IMAGE_SIDE), Image.LANCZOS)
-            return im.copy()
+            clean = im.copy()
+            clean.info.clear()        # no EXIF (camera model, GPS, timestamps), no profiles, no comments: only pixels ever leave the server
+            return clean
 
     def _call_gemini(self, image: Image.Image, quality: Dict = None):
         region_note = (
@@ -134,6 +137,7 @@ class MedicalAnalyzer:
         if quality and quality.get('issues'):
             region_note += " Automatic photo checks found: " + '; '.join(quality['issues']) + " Take this into account and say so."
         last_error = None
+        budget = model_calls.Budget()
         for attempt in (1, 2):
             try:
                 with telemetry.call('image', self.MODEL_NAME, 'image') as tcall:
@@ -141,10 +145,11 @@ class MedicalAnalyzer:
                         model=self.MODEL_NAME,
                         contents=[image, "Assess this photo. " + region_note],
                         config=types.GenerateContentConfig(
-                            system_instruction=SYSTEM_INSTRUCTION,
+                            system_instruction=SYSTEM_INSTRUCTION + language_prompts.note(),
                             response_mime_type='application/json',
                             response_schema=ImageAnalysisResult,
                             temperature=0.2,
+                            **model_calls.speed_kwargs(self.MODEL_NAME, model_calls.timeout_seconds() + 10),      # photos legitimately take a little longer
                         ),
                     )
                     tcall.api_done(response)
@@ -152,8 +157,10 @@ class MedicalAnalyzer:
             except Exception as e:  # transient 5xx / rate limit: retry once
                 last_error = e
                 logger.warning("Gemini image call attempt %d failed: %s", attempt, e)
-                if attempt == 1:
+                if attempt == 1 and budget.allows_retry(e, self.MODEL_NAME):
                     time.sleep(1.0)
+                else:
+                    break
         raise last_error
 
     def _analyze_with_gemini(self, image_path: str, image: Image.Image = None, quality: Dict = None) -> Dict:

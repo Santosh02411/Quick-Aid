@@ -21,11 +21,26 @@
     <li>Pages that show your health information are never stored by your browser's cache.</li>
   </ul>
 
-  <h2>Who else sees it</h2>
-  <p>When AI is switched on, the text you type and the photo you upload are <strong>sent to Google's Gemini service</strong> to produce the result. We do not sell your data and show no advertising. Usage statistics (timings and counts) contain no health text.</p>
+  <h2 id="ai">Is anything sent to an AI service?</h2>
+  <p><strong>Only if you agree, and only to Google's Gemini API.</strong> Until you choose, nothing you type or upload leaves this server: a simple built-in basic mode works on the server itself. You can change your choice at any time under Account → Your data, and it applies to your very next request.</p>
+  <div class="table-wrap" tabindex="0" role="region" aria-label="{{ t('a11y.table') }}"><table class="tbl">
+    <thead><tr><th>If you allow AI analysis</th><th>Sent to Google</th></tr></thead>
+    <tbody>
+      <tr><td>Symptom checks and interview answers</td><td>The text you typed, and your answers to the follow-up questions</td></tr>
+      <tr><td>Photo checks</td><td>The photo itself, re-encoded and size-limited, with its <strong>location, camera and time details removed</strong></td></tr>
+      <tr><td>Chats</td><td>Your message, recent messages in that chat, and a short summary of the result you are asking about</td></tr>
+      <tr><td><strong>Never sent</strong></td><td>Your name, username, email, password, account id, other history, notes, or anything about other people</td></tr>
+    </tbody>
+  </table></div>
+  <ul>
+    <li>Google processes that data under <strong>its own terms for the API plan this service uses</strong>, which can differ between plans (for example in whether data may be used to improve Google's products). Ask the operator of this service which plan is in use before you rely on it.</li>
+    <li>The AI can be <strong>wrong</strong>. Our own safety rules always run on top of its answer and can only make advice <em>more</em> cautious, never less.</li>
+    <li>Emergency wording in what you type is recognised on this server <strong>before</strong> anything is sent, so urgent guidance never waits for, or depends on, the AI.</li>
+    <li>We do not sell your data and show no advertising. Usage statistics (timings and counts) contain no health text.</li>
+  </ul>
 
   <h2>How long it is kept</h2>
-  <div class="table-wrap"><table class="tbl">
+  <div class="table-wrap" tabindex="0" role="region" aria-label="{{ t('a11y.table') }}"><table class="tbl">
     <thead><tr><th>What</th><th>How long</th></tr></thead>
     <tbody>
       <tr><td>Uploaded photos</td><td>Deleted immediately after analysis</td></tr>
