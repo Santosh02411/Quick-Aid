@@ -78,3 +78,39 @@ generated from the live settings so it cannot drift from what the code does.
 
 Every response carries `X-Request-ID`, and error bodies include the same `request_id`. A valid incoming `X-Request-ID` (8-64 chars of `A-Za-z0-9._-`) is
 reused, so a reverse proxy can propagate its own ids. Grep the log for the id to find the failing request. The user-facing 500 page shows it so a report can be traced.
+
+
+## Health checks and monitoring
+
+| Endpoint | Purpose | Who can call it |
+|---|---|---|
+| `GET /health` | **Liveness**: the process answers and the database is reachable. Restart the container if this fails. | anyone |
+| `GET /ready` | **Readiness**: database writable, schema fully migrated, photos can be written, enough free disk. Send traffic only when this is 200. | anyone |
+| `GET /metrics` | Prometheus metrics: requests and latency by *route pattern*, AI calls by outcome, analyses and emergencies, unhandled errors, schema version, uptime, database size. No user data. | `Authorization: Bearer $METRICS_TOKEN`, or an admin session. Everyone else gets 404. |
+
+Suggested alerts: `/ready` failing for more than 2 minutes; `rate(quickaid_unhandled_errors_total[5m]) > 0`; `quickaid_ai_calls_total{outcome="failed"}` above ~5% of calls;
+p95 of `quickaid_http_request_duration_seconds` above your target; `quickaid_last_maintenance_age_seconds` above 2x `MAINTENANCE_INTERVAL_HOURS`; and the dashboard's "fell back to basic mode" rate.
+Every error response carries an `X-Request-ID`; the same id is in the server log, so a user's report can be traced to one request.
+
+With several gunicorn workers, metrics are aggregated through `PROMETHEUS_MULTIPROC_DIR` (set by `deploy/gunicorn.conf.py`).
+
+## Production deployment checklist
+
+1. `cp .env.example .env`, fill in real values, **never commit it** (`python scripts/secret_scan.py --ignored` shows what your local `.env` holds).
+2. Set `SESSION_COOKIE_SECURE=True`, `BEHIND_PROXY=True` (behind nginx/TLS), a long `SECRET_KEY` **and** an explicit `CHAT_ENCRYPTION_KEY`, `ADMIN_USERNAMES` (register that account first), and `RATELIMIT_STORAGE_URI` (Redis) if you run more than one instance.
+3. `docker compose up --build -d`; optionally `docker compose --profile backup up -d` for daily backups. The web container is read-only with no capabilities; only the data and log volumes are writable.
+4. Point your load balancer at `/ready` and your uptime monitor at `/health`.
+5. Set up `SENTRY_DSN` (optional) and Prometheus scraping with `METRICS_TOKEN`.
+6. Copy backups off the machine, store the encryption key separately, and test a restore.
+7. Read the **Known limitations** in [SECURITY.md](SECURITY.md) before real patients use it, and get the translations reviewed ([TRANSLATION_REVIEW.md](TRANSLATION_REVIEW.md)).
+
+
+## Results are slow, or say "taking too long"
+
+1. **See what the model is doing.** `/metrics` (`quickaid_ai_call_duration_seconds`, `quickaid_ai_calls_total{outcome="failed"}`) and the admin dashboard show latency and the share of checks that fell back to the built-in mode.
+2. **The limits** (see `.env.example`, section 9): every model request stops after `GEMINI_TIMEOUT_SECONDS` (25 s; photos get 10 s more); a request that *timed out* is not retried; the whole check stops waiting after
+   `GEMINI_TOTAL_BUDGET_SECONDS` (40 s). So the longest anyone waits is bounded, and what they get then is the built-in check with first-aid steps, never an empty "try again".
+3. **Thinking is off** for Flash models. If you switch `GEMINI_MODEL` to a Pro model, thinking cannot be disabled and answers will be slower; consider keeping Flash.
+4. **The first question is instant** (built-in bank). `INTERVIEW_AI_PLAN=true` re-adds a model call before it.
+5. **If everything looks like the "simple built-in check":** AI analysis is opt-in per person (see SECURITY.md). Results say so and offer a one-click "Turn on AI analysis".
+6. A *consistently* slow provider is usually network egress or a rate limit on the API key: check `docker logs` for `Gemini ... attempt 1 failed`.
