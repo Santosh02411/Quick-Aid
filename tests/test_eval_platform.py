@@ -102,13 +102,17 @@ class TestDatasetVersioning:
         data = json.loads(f.read_text())
         data['cases'].append(dict(data['cases'][0], id='ZZ1'))
         f.write_text(json.dumps(data))
+        before = datasets.load_manifest()['datasets']['symptom_cases']['version']
+        major, minor, _patch = (int(x) for x in before.split('.'))
         meta = datasets.bump('symptom_cases', 'added one case', 'minor')
-        assert meta['version'] == '1.1.0' and meta['cases'] == len(data['cases']) and meta['changelog'][-1]['note'] == 'added one case'
+        assert meta['version'] == f'{major}.{minor + 1}.0' and meta['cases'] == len(data['cases']) and meta['changelog'][-1]['note'] == 'added one case'
         assert datasets.verify() == []
 
     def test_version_parts(self, sandbox):
-        assert datasets.bump('model_output_cases', 'x', 'patch')['version'] == '1.0.1'
-        assert datasets.bump('model_output_cases', 'x', 'major')['version'] == '2.0.0'
+        before = datasets.load_manifest()['datasets']['model_output_cases']['version']
+        major, minor, patch = (int(x) for x in before.split('.'))
+        assert datasets.bump('model_output_cases', 'x', 'patch')['version'] == f'{major}.{minor}.{patch + 1}'
+        assert datasets.bump('model_output_cases', 'x', 'major')['version'] == f'{major + 1}.0.0'
 
     def test_frozen_test_sets_refuse_to_be_bumped(self, sandbox):
         with pytest.raises(PermissionError):
@@ -311,7 +315,7 @@ class TestMetricDefinitions:
     def outcome(self, **kw):
         base = {'id': 'x', 'category': 'c', 'text': '', 'level': 'low', 'alert': False, 'abstained': False, 'before': None, 'raised': False,
                 'reliability': None, 'problems': [], 'known_limitation': False, 'expected_min': None, 'expected_max': None,
-                'emergency': None, 'forbid_emergency': False, 'abstain_ok': False}
+                'emergency': None, 'forbid_emergency': False, 'abstain_ok': False, 'reassurance_detected': False}
         base.update(kw)
         return base
 

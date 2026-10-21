@@ -402,3 +402,91 @@ class TestAiLanguage:
             assert prompt_registry.fingerprint() == before
         finally:
             i18n.reset(tok)
+
+
+class TestResolvedSymptomsAcrossLanguages:
+    """'The chest pain went away last week' is different from negation. Fixed in English this round
+    (triage_engine.resolved()); the hi/mr/kn detector does not yet have an equivalent mechanism, so these
+    document its current (English-only) scope rather than claim parity that does not exist."""
+
+    def test_english_resolution_is_not_an_alarm(self):
+        assert not te.scan("the chest pain went away last week, today I just have a sore throat").any_emergency
+
+    def test_a_still_current_symptom_is_not_suppressed_by_an_unrelated_resolution(self):
+        assert te.scan("my nausea went away but I still have crushing chest pain").any_emergency
+
+
+class TestNegationIntensifiersAcrossLanguages:
+    """Common intensifier/emphasis words routinely sit BETWEEN a symptom and its negation in natural speech
+    ('बिल्कुल नहीं' = not at all, 'तो नहीं' = an emphatic no). Missing these would mean an ordinary, unambiguous
+    denial reads as a positive emergency match - found and fixed this round."""
+
+    @pytest.mark.parametrize('text', [
+        'सीने में दर्द नहीं है', 'सीने में दर्द बिल्कुल नहीं है', 'सीने में दर्द तो नहीं है',
+        'सीने में दर्द अभी नहीं है', 'सीने में दर्द बिल्कुल भी नहीं है', 'सीने में दर्द जरा भी नहीं है',
+        'छातीत दुखणे अजिबात नाही', 'छातीत दुखणे मुळीच नाही', 'ಎದೆ ನೋವು ಖಂಡಿತ ಇಲ್ಲ',
+    ])
+    def test_an_intensified_negation_is_not_an_alarm(self, text):
+        found, crisis = em.detect(text)
+        assert found == [] and not crisis, text
+
+    @pytest.mark.parametrize('text,label', [
+        ('सीने में तेज दर्द है', 'Chest pain or pressure'),
+        ('सीने में दर्द हो रहा है, बिल्कुल ठीक नहीं लग रहा', 'Chest pain or pressure'),   # filler word present but NOT adjacent to negation of the symptom itself
+    ])
+    def test_the_filler_list_does_not_create_a_loophole_for_a_real_emergency(self, text, label):
+        found, crisis = em.detect(text)
+        assert label in found, text
+
+    def test_the_filler_list_is_a_short_curated_set_not_a_wildcard(self):
+        # a sanity check on the mechanism itself: an arbitrary unrelated word between symptom and negation
+        # must NOT be treated as a filler (this is deliberately narrow, not "any word")
+        found, _ = em.detect('सीने में दर्द कुर्सी नहीं है')
+        assert 'Chest pain or pressure' in found   # "कुर्सी" (chair) is nonsense here and must not suppress the alert
+
+
+class TestColloquialAndIdiomaticPhrasing:
+    """Phrases a real person would actually use, beyond the direct clinical-style wording the patterns started
+    with - found by testing fresh idioms not present in any dataset, then fixed."""
+
+    @pytest.mark.parametrize('text,label', [
+        ('छाती फट रही है', 'Chest pain or pressure'),                                     # "chest is bursting"
+        ('सांस उखड़ रही है', 'Severe trouble breathing'),                                   # "breath coming apart"
+        ('आंखों के आगे अंधेरा छा गया और गिर गया', 'Loss of consciousness or seizure'),       # "darkness before the eyes", fell
+        ('छाती फुटल्यासारखी वाटतेय', 'Chest pain or pressure'),
+        ('डोळ्यासमोर अंधारी आली आणि पडला', 'Loss of consciousness or seizure'),
+        ('विंचवाने नांगी मारली', 'Snake or scorpion bite'),                                 # "the scorpion struck with its sting"
+        ('ಎದೆ ಒಡೆದ ಹಾಗೆ ಆಗ್ತಿದೆ', 'Chest pain or pressure'),                                 # "feels like the chest is breaking"
+        ('ಕಣ್ಣು ಕತ್ತಲೆ ಬಂದು ಬಿದ್ದುಬಿಟ್ಟ', 'Loss of consciousness or seizure'),                # "darkness came to the eyes", fell
+    ])
+    def test_idiomatic_phrasing_is_recognised(self, text, label):
+        found, crisis = em.detect(text)
+        assert label in found, text
+
+
+class TestAmbiguousPhrases:
+    """Phrases that are genuinely ambiguous between a benign and a concerning reading. The project's stated
+    philosophy ('when in doubt, alert') means these should lean toward raising, not suppressing, a warning -
+    checked directly rather than assumed."""
+
+    @pytest.mark.parametrize('text', [
+        'छाती में थोड़ा सा भारीपन है',       # "a little heaviness in the chest" - people often understate a real cardiac symptom this way
+        'छाती में हल्का सा दबाव महसूस हो रहा है',  # "feeling a slight pressure in the chest" - same understatement pattern
+    ])
+    def test_an_understated_but_still_specific_chest_symptom_still_alerts(self, text):
+        found, _ = em.detect(text)
+        assert 'Chest pain or pressure' in found, text
+
+    @pytest.mark.parametrize('text', [
+        'कल रात अच्छी नींद नहीं आई',          # "didn't sleep well last night" - unrelated to any warning sign
+        'आज थोड़ा सुस्त महसूस हो रहा है',      # "feeling a bit sluggish today" - vague but genuinely benign
+        'काम का बहुत तनाव है',                 # "a lot of work stress" - benign
+        # maximally vague distress language ("something feels strange") with no specific, describable symptom word is
+        # deliberately NOT treated as a chest-pain match: broadening this far would trade real false alarms for a
+        # phrase vague enough to describe almost anything. The UI still asks such a person to describe things more
+        # specifically rather than silently doing nothing (see symptom_checker.py's "describe a little more" fallback).
+        'कुछ ठीक नहीं लग रहा, सीने में अजीब सा महसूस हो रहा है',
+    ])
+    def test_genuinely_unrelated_or_too_vague_complaints_do_not_alert(self, text):
+        found, crisis = em.detect(text)
+        assert found == [] and not crisis, text

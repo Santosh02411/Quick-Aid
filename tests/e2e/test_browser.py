@@ -71,6 +71,53 @@ class TestJourneys:
         page.goto(live + '/emergency')
         assert page.locator('html').get_attribute('lang') == 'hi' and 'आपातकालीन सहायता' in page.locator('h1').inner_text()
 
+    def test_recent_checks_updates_live_instead_of_staying_stale(self, live, make_page):
+        """Found via a real browser: the stat cards at the top of the dashboard update live via JS after a check
+        completes, but 'Recent checks' right below them was purely server-rendered and never refreshed - right
+        after finishing a check (especially an emergency one), a person could see 'Flagged as urgent' tick up
+        directly above a list still saying 'Nothing here yet', which could read as 'did this actually get saved?'
+        at exactly the wrong moment."""
+        page = make_page()
+        sign_up(page, live, name='recentcheckfix')
+        assert 'Nothing here yet' in page.locator('section:has(#recent-h)').inner_text()
+        page.fill('#symptomsInput', 'severe crushing chest pain and sweating')
+        page.click('#checkSymptomsBtn')
+        page.wait_for_selector('#symptomResult.on', timeout=10000)
+        section_text = page.locator('section:has(#recent-h)').inner_text()
+        assert 'Nothing here yet' not in section_text and 'View all' in section_text
+        assert page.locator('#recentList li').count() == 1
+        assert page.js_errors == []
+
+    def test_a_recovery_code_actually_fits_in_the_login_2fa_field(self, live, make_page):
+        """Found via real-browser testing, not catchable by a Flask-test-client unit test (which posts raw data and
+        never goes through the HTML input's own maxlength/pattern constraints at all): the login 2FA field used to
+        have maxlength=6 and a digits-only pattern, inherited from the TOTP-code case, which silently truncated an
+        11-character recovery code (XXXXX-XXXXX) to 6 characters the moment a real browser typed it in - a person
+        who lost their authenticator device could not actually use their recovery codes through this form."""
+        import re as _re
+        page = make_page()
+        sign_up(page, live, name='recoverytest2fa')
+        page.goto(live + '/account/2fa/setup')
+        secret = page.locator('.secret-box').inner_text().strip()
+        import pyotp
+        page.fill('input[name=code]', pyotp.TOTP(secret).now())
+        page.click('button[type=submit]')
+        page.wait_for_selector('text=recovery')
+        codes = _re.findall(r'\b[A-Z2-9]{5}-[A-Z2-9]{5}\b', page.locator('body').inner_text())
+        assert len(codes) == 10
+        page.locator('form[action="/logout"] button[type=submit]').first.click()
+        page.goto(live + '/login')
+        page.fill('#username', 'recoverytest2fa')
+        page.fill('#password', PW)
+        page.click('button[type=submit]')
+        page.wait_for_url('**/login/2fa')
+        code_input = page.locator('input[name=code]')
+        code_input.fill(codes[0])
+        assert code_input.input_value() == codes[0]        # the field must not have silently truncated it
+        page.click('button[type=submit]')
+        page.wait_for_load_state()
+        assert '/login/2fa' not in page.url and page.js_errors == []
+
     def test_the_consent_card_works_and_goes_away(self, live, make_page, app, monkeypatch):
         monkeypatch.setenv('REQUIRE_AI_CONSENT', 'true')
         app.extensions['quickaid_services'].symptom_checker.use_gemini = True            # pretend AI is configured so the question is asked
