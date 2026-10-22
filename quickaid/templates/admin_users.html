@@ -1,0 +1,65 @@
+{% extends 'base.html' %}
+{% from '_macros.html' import icon %}
+{% block title %}Admin · Users{% endblock %}
+{% block content %}
+<div class="page admin-page" id="adminUsersApp">
+  <div class="page-head">
+    <h1>Users</h1>
+    <span class="badge badge-warn">Internal · admins only</span>
+  </div>
+  <p class="muted" style="max-width:78ch">
+    Account management only - usernames, email and sign-in status. <strong>This page never shows anyone's symptoms,
+    photos, chats or notes.</strong> Every action here is logged to that person's own "recent security activity"
+    (visible to them on their Account page) and, where there is somewhere to send it, emails them - an admin action
+    is never invisible to the person it affects. The exact same actions are available from the terminal
+    (<code>python -m quickaid.core.accounts_cli</code>), for when you only have shell access.
+  </p>
+
+  <div id="adminUsersBanner"></div>
+
+  <section class="panel" aria-labelledby="users-h">
+    <div class="page-head" style="margin-bottom:.6rem">
+      <h2 id="users-h" style="margin:0">Accounts</h2>
+      <label class="inline-label">
+        <span class="sr-only">Search by username or email</span>
+        <input type="search" id="userSearch" placeholder="Search username or email" autocomplete="off">
+      </label>
+    </div>
+    <div class="table-wrap" tabindex="0" role="region" aria-label="Accounts">
+      <table class="tbl" id="usersTable">
+        <thead><tr><th>Username</th><th>Email</th><th>Verified</th><th>2FA</th><th>Admin</th><th>Created</th><th>Actions</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <p class="muted" id="usersEmpty" hidden>No accounts match that search.</p>
+  </section>
+
+  <section class="panel" id="userDetail" hidden aria-labelledby="detail-h">
+    <div class="page-head" style="margin-bottom:.4rem">
+      <h2 id="detail-h" style="margin:0">Account detail</h2>
+      <button type="button" class="btn btn-ghost btn-sm" id="closeDetail">Close</button>
+    </div>
+    <div id="detailBody"></div>
+    <h3>Recent security activity</h3>
+    <div class="table-wrap" tabindex="0" role="region" aria-label="Recent security activity">
+      <table class="tbl" id="detailEvents"><thead><tr><th>When (UTC)</th><th>What</th></tr></thead><tbody></tbody></table>
+    </div>
+  </section>
+</div>
+
+<div class="modal" id="confirmModal" hidden role="alertdialog" aria-modal="true" aria-labelledby="confirmTitle">
+  <div class="modal-card">
+    <h2 id="confirmTitle"></h2>
+    <p id="confirmBody"></p>
+    <div id="confirmTypeBox" hidden>
+      <label for="confirmType" id="confirmTypeLabel"></label>
+      <input type="text" id="confirmType" autocomplete="off">
+    </div>
+    <div class="actions">
+      <button type="button" class="btn btn-ghost" id="confirmCancel">Cancel</button>
+      <button type="button" class="btn btn-danger" id="confirmOk"></button>
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='js/admin_users.js') }}" defer></script>{% endblock %}

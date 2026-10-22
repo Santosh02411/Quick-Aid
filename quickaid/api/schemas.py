@@ -137,3 +137,7 @@ class RunRequest(BaseModel):
     model: Literal['offline', 'mock-rules', 'mock-weak', 'mock-flaky'] = 'offline'
     sets: List[str] = Field(default_factory=lambda: ['symptom_cases'])
     label: str = Field('', max_length=120)
+
+
+class AdminDeleteAccountBody(BaseModel):
+    confirm: str = Field(..., min_length=1, max_length=120, description='Must exactly repeat the account\u2019s username or email, as a deliberate typo guard.')

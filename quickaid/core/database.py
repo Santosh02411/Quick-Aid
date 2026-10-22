@@ -159,6 +159,23 @@ def get_user_by_email(email: str) -> Optional[Dict]:
     return _user_dict(row)
 
 
+def list_all_users(query: Optional[str] = None) -> List[Dict]:
+    """For admin tooling (the CLI and the web admin dashboard) only: username, email and account-level flags, in
+    that order, newest first. Deliberately NOT routed through _user_dict() - an admin listing has no reason to
+    decrypt every user's 2FA secret, and never should by default. Never includes health data of any kind; nothing
+    here can be used to read a person's symptoms, photos, chats or notes."""
+    sql = "SELECT id, username, email, email_verified, totp_enabled, has_password, created_at FROM users"
+    params: tuple = ()
+    if query:
+        sql += " WHERE username LIKE ? OR email LIKE ?"
+        like = f"%{query}%"
+        params = (like, like)
+    sql += " ORDER BY created_at DESC"
+    with get_connection() as conn:
+        rows = conn.execute(sql, params).fetchall()
+    return [dict(r) for r in rows]
+
+
 def username_taken(username: str, exclude_user_id: Optional[int] = None) -> bool:
     with get_connection() as conn:
         row = conn.execute(

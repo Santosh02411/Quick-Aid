@@ -656,3 +656,22 @@ html[lang="kn"] h1, html[lang="kn"] h2, html[lang="kn"] h3 { font-family: inheri
 [data-theme="light"] .sos-strip { color: #a82a1f; }
 .table-wrap:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
 [data-theme="light"] .nav-item.nav-sos, [data-theme="light"] .tabbar a.sos { color: #a82a1f; }
+
+/* ---------- Admin: users ---------- */
+.modal { position: fixed; inset: 0; z-index: 50; display: flex; align-items: center; justify-content: center;
+  background: color-mix(in srgb, black 45%, transparent); padding: 1rem; }
+.modal[hidden] { display: none; }
+.modal-card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow);
+  padding: 1.5rem; max-width: 440px; width: 100%; }
+.modal-card h2 { margin-top: 0; }
+.modal-card #confirmTypeBox { margin: .75rem 0; }
+.modal-card #confirmTypeBox input { width: 100%; }
+.modal-card .actions { display: flex; justify-content: flex-end; gap: .6rem; margin-top: 1.2rem; }
+.status-dot { display: inline-block; width: .6em; height: .6em; border-radius: 50%; margin-right: .4em; vertical-align: middle; }
+.status-dot.on { background: var(--success, #1a7f4e); }
+.status-dot.off { background: var(--line); }
+.row-actions { display: flex; flex-wrap: wrap; gap: .4rem; }
+.row-actions .btn { padding: .3em .7em; font-size: .82rem; }
+.detail-list { display: grid; grid-template-columns: max-content 1fr; gap: .35rem 1rem; margin: 0 0 1rem; }
+.detail-list dt { font-weight: 600; color: var(--muted); }
+.detail-list dd { margin: 0; }

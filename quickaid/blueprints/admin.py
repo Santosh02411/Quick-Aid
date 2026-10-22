@@ -1,22 +1,27 @@
-"""Internal AI-evaluation dashboard (admins only). Anyone else gets 404, so its existence is not revealed."""
+"""Internal admin tooling (AI evaluation + user accounts). Admins only - everyone else gets 404, so its existence
+is not revealed. "Admin" means an account listed in ADMIN_USERNAMES (set from the terminal/.env, never from the
+sign-up page or any page a logged-in user could reach - see User.is_admin in accounts/auth.py)."""
 
 import functools
 import os
 import re
 from datetime import datetime, timedelta, timezone
 
-from flask import Blueprint, abort, render_template, request
+from flask import Blueprint, abort, render_template, request, url_for
 from flask_login import current_user, login_required
 
 from quickaid.ai import prompt_registry, telemetry
 from quickaid.ai.triage_engine import ENGINE_VERSION
 from quickaid.api.openapi import doc
 from quickaid.api.responses import ApiError, ok
-from quickaid.api.validation import json_object
+from quickaid.api.schemas import AdminDeleteAccountBody
+from quickaid.api.validation import json_object, parse_model
 from quickaid.core import database as db
 from quickaid.core.logging_config import get_logger
 from quickaid.evaluation import datasets as eval_datasets, runs as eval_runs, stats as eval_stats
 from quickaid.extensions import limiter
+from quickaid.services import admin_accounts
+from quickaid.services.accounts import build_absolute_url
 from quickaid.services.container import get_services
 
 logger = get_logger('admin')
@@ -38,7 +43,7 @@ def admin_required(view):
 @bp.route('/admin/evaluation')
 @admin_required
 def admin_evaluation():
-    return render_template('admin_evaluation.html', active_page='admin')
+    return render_template('admin_evaluation.html', active_page='admin_evaluation')
 
 
 @bp.route('/admin/api/overview')
@@ -113,3 +118,91 @@ def admin_start_run():
         logger.error("Dashboard evaluation run failed", exc_info=True)
         raise ApiError(f'The evaluation failed: {e}', 500, 'evaluation_failed')
     return ok({'run_id': record['run_id'], 'metrics': record['metrics'], 'threshold_failures': record['threshold_failures']})
+
+
+# ---------------------------------------------------------------------------
+# User management: accounts, not health data. Every action here calls the SAME
+# quickaid.services.admin_accounts functions the terminal tool (quickaid.core.accounts_cli) uses, so the two can
+# never behave differently, and every action is logged to the affected person's own security history and, where
+# there is somewhere to send it, emailed to them - an admin action is never invisible to the person it affects.
+# ---------------------------------------------------------------------------
+
+def _admin_label() -> str:
+    return getattr(current_user, 'username', '') or 'web admin'
+
+
+def _run_admin_action(fn, *args, **kwargs):
+    try:
+        return fn(*args, by=_admin_label(), **kwargs)
+    except admin_accounts.AdminActionError as e:
+        raise ApiError(str(e), 404 if 'no account found' in str(e).lower() else 400, 'admin_action_failed')
+
+
+@bp.route('/admin/users')
+@admin_required
+def admin_users_page():
+    return render_template('admin_users.html', active_page='admin_users')
+
+
+@bp.route('/admin/api/users')
+@admin_required
+@doc('List accounts (no health data)', tags=['Admin'], admin=True,
+     description='Username, email, verification and 2FA status, account creation date. Never symptoms, photos, chats or notes.')
+def admin_api_users():
+    q = (request.args.get('q') or '').strip()[:120] or None
+    rows = admin_accounts.list_accounts(q)
+    admin_names = {n.strip().lower() for n in os.getenv('ADMIN_USERNAMES', '').split(',') if n.strip()}
+    for r in rows:
+        r['is_admin'] = r['username'].lower() in admin_names
+    return ok({'users': rows, 'admin_configured': bool(admin_names)})
+
+
+@bp.route('/admin/api/users/<identifier>')
+@admin_required
+@doc('One account\'s details and recent security activity', tags=['Admin'], admin=True)
+def admin_api_user_detail(identifier):
+    try:
+        return ok({'user': admin_accounts.account_detail(identifier)})
+    except admin_accounts.AdminActionError as e:
+        raise ApiError(str(e), 404, 'account_not_found')
+
+
+@bp.route('/admin/api/users/<identifier>/reset-2fa', methods=['POST'])
+@admin_required
+@limiter.limit("20 per minute")
+@doc('Disable a locked-out account\'s 2FA so they can sign back in with just their password', tags=['Admin'], admin=True,
+     description='Also signs the account out everywhere. The person is emailed and it appears in their own security history. '
+                'They can set 2FA up again once they are back in.')
+def admin_reset_2fa(identifier):
+    result = _run_admin_action(admin_accounts.reset_two_factor, identifier)
+    return ok({'reset': True, 'username': result['username']})
+
+
+@bp.route('/admin/api/users/<identifier>/force-logout', methods=['POST'])
+@admin_required
+@limiter.limit("20 per minute")
+@doc('Sign an account out of every device', tags=['Admin'], admin=True)
+def admin_force_logout(identifier):
+    result = _run_admin_action(admin_accounts.force_logout, identifier)
+    return ok({'logged_out': True, 'username': result['username']})
+
+
+@bp.route('/admin/api/users/<identifier>/send-password-reset', methods=['POST'])
+@admin_required
+@limiter.limit("10 per minute")
+@doc('Email the account a password-reset link', tags=['Admin'], admin=True)
+def admin_send_password_reset(identifier):
+    build_link = lambda token: build_absolute_url(url_for('auth.reset_password', token=token))  # noqa: E731
+    result = _run_admin_action(admin_accounts.start_password_reset, identifier, build_link)
+    return ok({'sent': True, 'username': result['username']})
+
+
+@bp.route('/admin/api/users/<identifier>/delete', methods=['POST'])
+@admin_required
+@limiter.limit("10 per minute")
+@doc('Permanently delete an account and everything it owns', tags=['Admin'], admin=True, request='AdminDeleteAccountBody',
+     description='Cannot be undone. The confirm field must exactly repeat the username or email given in the URL, as a typo guard.')
+def admin_delete_user(identifier):
+    body = parse_model(AdminDeleteAccountBody, json_object())
+    result = _run_admin_action(admin_accounts.delete_account, identifier, confirm=body.confirm)
+    return ok({'deleted': True, 'username': result['username']})

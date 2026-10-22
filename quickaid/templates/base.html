@@ -44,7 +44,8 @@
     <a class="nav-item" href="/chat" {% if active == 'chat' %}aria-current="page"{% endif %}>{{ icon('chat') }}{{ t('nav.ask') }}</a>
     <a class="nav-item" href="/history" {% if active == 'history' %}aria-current="page"{% endif %}>{{ icon('history') }}{{ t('nav.history') }}</a>
     <a class="nav-item" href="/account" {% if active == 'account' %}aria-current="page"{% endif %}>{{ icon('user') }}{{ t('nav.account') }}</a>
-    {% if current_user.is_admin %}<a class="nav-item" href="/admin/evaluation" {% if active == 'admin' %}aria-current="page"{% endif %}>{{ icon('shield') }}AI evaluation</a>{% endif %}
+    {% if current_user.is_admin %}<a class="nav-item" href="/admin/evaluation" {% if active == 'admin_evaluation' %}aria-current="page"{% endif %}>{{ icon('shield') }}AI evaluation</a>{% endif %}
+    {% if current_user.is_admin %}<a class="nav-item" href="/admin/users" {% if active == 'admin_users' %}aria-current="page"{% endif %}>{{ icon('user') }}Users</a>{% endif %}
     <a class="nav-item nav-sos" href="/emergency" {% if active == 'emergency' %}aria-current="page"{% endif %}>{{ icon('phone') }}{{ t('nav.emergency') }}</a>
     <div class="sidebar-foot">
       <div class="user-chip">
