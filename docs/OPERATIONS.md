@@ -105,6 +105,35 @@ With several gunicorn workers, metrics are aggregated through `PROMETHEUS_MULTIP
 7. Read the **Known limitations** in [SECURITY.md](SECURITY.md) before real patients use it, and get the translations reviewed ([TRANSLATION_REVIEW.md](TRANSLATION_REVIEW.md)).
 
 
+## Account recovery: locked out of 2FA, or any account-management task
+
+**For yourself, or when someone reports they cannot sign in**, and recovery codes are not an option (lost, never
+saved, or already used up): reset their 2FA from the terminal or the web dashboard. Neither needs the person's
+password, and both work even if the admin account itself is the one that is locked out (the CLI only needs shell
+access on the server).
+
+```bash
+python -m quickaid.core.accounts_cli show USERNAME_OR_EMAIL        # confirm it is the right account first
+python -m quickaid.core.accounts_cli reset-2fa USERNAME_OR_EMAIL   # disables 2FA, signs out everywhere, emails them
+```
+
+Or, signed in as an account listed in `ADMIN_USERNAMES`: **Users** in the sidebar (`/admin/users`) → find the
+account → **Reset 2FA**. The web dashboard and the CLI call the same code
+(`quickaid/services/admin_accounts.py`), so they always behave identically. Either way the action is logged to the
+affected person's own security history and, if mail is configured, emailed to them - this is never invisible to
+them. Full account listing, force sign-out-everywhere, emailing a password-reset link, and permanent deletion (with
+a typed-confirmation guard) are also available from both; see the README's "Admin: managing users" section for the
+full command list.
+
+Deliberately **not** provided: an email-based one-time-code fallback for 2FA. That would let a compromised email
+account (which is also the password-reset channel) bypass two-factor authentication entirely - a security
+downgrade dressed up as a convenience. Recovery codes are the self-service path; admin reset is the correct last
+resort, the same as how most real services actually handle this (verify identity out of band, then reset).
+
+**Creating the first admin account**: register the account normally through the app, then add its username to
+`ADMIN_USERNAMES` in `.env` and restart - never through the sign-up page or any page a logged-in user could reach.
+
+
 ## Results are slow, or say "taking too long"
 
 1. **See what the model is doing.** `/metrics` (`quickaid_ai_call_duration_seconds`, `quickaid_ai_calls_total{outcome="failed"}`) and the admin dashboard show latency and the share of checks that fell back to the built-in mode.
