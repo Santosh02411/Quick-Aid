@@ -134,7 +134,7 @@ Copy `.env.example` to `.env` and fill it in. Every variable is explained in det
 | `SECRET_KEY` | A random 64-character string. Keep it private and stable, or everyone is logged out on restart. | Run `python -c "import secrets; print(secrets.token_hex(32))"` |
 | `FLASK_DEBUG` | `False` (always in production). `True` only for local development. | – |
 | `CHAT_ENCRYPTION_KEY` *(optional)* | Long random string used to encrypt chats and interview answers. Blank = derived from `SECRET_KEY`. **Keep it stable** or old chats become unreadable. | `python -c "import secrets; print(secrets.token_urlsafe(48))"` |
-| `ADMIN_USERNAMES` *(optional)* | Comma-separated usernames allowed to open the evaluation dashboard (`/admin/evaluation`). Blank = nobody. Everyone else sees "not found". | – |
+| `ADMIN_USERNAMES` *(optional)* | Comma-separated usernames allowed to open the evaluation dashboard (`/admin/evaluation`) **and** the user-management dashboard (`/admin/users` - see "Admin: managing users" below, e.g. for recovering a 2FA-locked account). Blank = nobody. Everyone else sees "not found". | – |
 | `DEFAULT_RETENTION_DAYS` / `HISTORY_MAX_RETENTION_DAYS` *(optional)* | Days saved checks and chats are kept until a person chooses (default 365; 0 = until deleted) / an operator ceiling nobody can exceed (0 = none) | – |
 | `UPLOAD_MAX_AGE_MINUTES`, `MAINTENANCE_INTERVAL_HOURS` *(optional)* | Leftover-photo cleanup age (30) and how often the automatic clean-up runs (24) | – |
 | `BACKUP_DIR`, `BACKUP_KEEP` *(optional)* | Where backups go and how many scheduled ones to keep (14) | – |
@@ -382,6 +382,36 @@ python evaluation/run_evaluation.py --list-runs ;  python evaluation/run_evaluat
 Automated tests use only mocked clients and never touch the network. Real model output is evaluated against **reference data the model and prompt author did not write**: the curated symptom datasets (written by the developers and *not* clinician-reviewed, which the dashboard says) and, for photos, a reference set **you** supply with provenance and independent labels (`evaluation/reference/README.md`). Recording real responses means a safety-rule change can be re-scored on the *same* outputs without spending anything. Live runs stay on the command line: the dashboard can start only offline and mock runs.
 
 **Evaluation traffic is isolated** from live telemetry, so running an evaluation never pollutes production numbers.
+
+## Admin: managing users
+
+There is no "become an admin" option anywhere a signed-up user could reach, on purpose - an admin account is created the same way as the evaluation dashboard's: put a username in `ADMIN_USERNAMES` in `.env` (comma-separated for more than one) and restart. That account then sees **Users** in the sidebar alongside **AI evaluation**; everyone else, signed in or not, gets a "not found" page on both the page and its API routes.
+
+**What it is for:** account-level administration, never health data. The dashboard (`/admin/users`) shows username, email, verification and 2FA status, account age - never anyone's symptoms, photos, chats or notes, and that boundary is tested (`tests/test_admin_users.py`). From it you can:
+
+| Action | What it does |
+|---|---|
+| **Reset 2FA** | Disables two-factor authentication and clears recovery codes, signs the account out everywhere. **This is how to recover a locked-out account** - lost authenticator app, no saved recovery codes, codes rejected. The person can set 2FA up again once they are back in. |
+| **Sign out everywhere** | Invalidates every device currently signed in as that account. |
+| **Email password reset** | Sends the normal password-reset email on the person's behalf. |
+| **Delete** | Permanently deletes the account and everything it owns, via the same secure-deletion path (overwrite, deletion tombstone) a person deleting their own account uses. Requires typing the username again as confirmation; cannot be undone. |
+
+Every action is logged to **that person's own** "recent security activity" (visible to them on their Account page) and, where there is somewhere to send it, emails them - an admin action is never invisible to the person it affects.
+
+**The same actions from a terminal**, for when you only have shell access (or the account that would do the fixing is itself the one that is locked out):
+
+```bash
+python -m quickaid.core.accounts_cli list                                  # every account: username, email, verified, 2FA, admin, created
+python -m quickaid.core.accounts_cli show USERNAME_OR_EMAIL                # one account's detail + recent security activity
+python -m quickaid.core.accounts_cli reset-2fa USERNAME_OR_EMAIL           # recover a locked-out account
+python -m quickaid.core.accounts_cli force-logout USERNAME_OR_EMAIL
+python -m quickaid.core.accounts_cli send-password-reset USERNAME_OR_EMAIL [--site https://your-domain.example]
+python -m quickaid.core.accounts_cli delete USERNAME_OR_EMAIL --confirm USERNAME_OR_EMAIL
+```
+
+The web dashboard and the CLI call the exact same code (`quickaid/services/admin_accounts.py`), so the two can never behave differently.
+
+**Why there is no "forgot my 2FA, email me a one-time code instead" option:** that would be a real security downgrade, not a convenience - it would mean a compromised email account (which is *also* the password-reset channel) bypasses two-factor authentication entirely. Recovery codes are the correct self-service path for a lost authenticator; admin reset (CLI or dashboard) is the correct last resort when those are not available either, the same way most real services handle it (contact whoever can verify it is really you, out of band).
 
 ## Photo Upload Workflow
 
