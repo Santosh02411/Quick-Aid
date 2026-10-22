@@ -63,6 +63,12 @@ def app(temp_db_path, monkeypatch):
         'TESTING': True,
         'WTF_CSRF_ENABLED': False,
     })
+    # The rate limiter's default storage is in-memory and PROCESS-wide (see extensions.py), not per-app-instance, so
+    # without this, requests made by an earlier test in the same pytest run count against a later, unrelated test's
+    # limit - occasional, hard-to-reproduce failures that depend on test order and how many tests ran first.
+    from quickaid.extensions import limiter
+    with app_module.app.app_context():
+        limiter.reset()
     yield app_module.app
 
 
