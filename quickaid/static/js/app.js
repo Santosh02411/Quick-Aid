@@ -160,6 +160,22 @@
     container.appendChild(h('h3', { text: title }));
     container.appendChild(list(items, cls));
   }
+  // "Warning signs present now" needs its own renderer (not the generic section() helper): each item here is a
+  // clinical CATEGORY name (e.g. "Chest pain or pressure" covers pain, pressure AND tightness together, since
+  // they are closer to each other than any is to an unrelated symptom) - showing which of the person's OWN words
+  // triggered it, right next to the category, makes that visible instead of leaving them to wonder why a word
+  // they did not use appears in the label.
+  function redFlagsPresent(container, items, matchedText) {
+    if (!items || !items.length) return;
+    container.appendChild(h('h3', { text: 'Warning signs present now' }));
+    var ul = h('ul', { class: 'present' });
+    items.forEach(function (label) {
+      var clean = String(label).replace(/^[\u{1F300}-\u{1FAFF}\u2600-\u27BF\uFE0F\s]+/u, '');
+      var said = matchedText && matchedText[label];
+      ul.appendChild(h('li', {}, clean, said ? h('span', { class: 'matched-from' }, ' \u2014 you said: \u201c' + said + '\u201d') : null));
+    });
+    container.appendChild(ul);
+  }
   function chips(container, title, items) {
     if (!items || !items.length) return;
     container.appendChild(h('h3', { text: title }));
@@ -403,6 +419,13 @@
       appendCallLine(p, T('high_call', 'Call {n} or go to the nearest emergency department now.'), emergencyNumber);
       msgBox.appendChild(p);
       if (emergency && a.emergency_alert.reason) msgBox.appendChild(h('p', { text: a.emergency_alert.reason }));
+      // "Can be a sign of" - deliberately hedged, never "this is" or "you have": see MAY_INDICATE in
+      // triage_engine.py for why. This does not replace the warning-sign list below, it sits alongside it.
+      var mi = emergency && a.emergency_alert.may_indicate;
+      if (mi && mi.length) {
+        msgBox.appendChild(h('p', { class: 'may-indicate' },
+          h('b', {}, T('may_indicate_label', 'This can be a sign of: ')), mi.join(', ') + '.'));
+      }
     } else {
       msgBox.appendChild(h('p', { text: t.msg }));
       if (sameDay || insufficient) {
@@ -427,7 +450,7 @@
       details(body, 'Details you gave', rep.details);
       if (!explanations(body, a.possible_explanations, 'What it could be')) chips(body, 'Possible causes', a.possible_conditions);
     }
-    section(body, 'Warning signs present now', a.red_flags_present, 'present');
+    redFlagsPresent(body, a.red_flags_present, (a.emergency_alert && a.emergency_alert.matched_text) || {});
     section(body, kind === 'symptom' ? T('what_to_do', 'What to do') : T('what_to_do_now', 'What to do now'), a.recommendations);
     section(body, T('avoid', 'Avoid'), a.avoid, 'avoid');
     section(body, kind === 'symptom' ? T('warn_urgent', 'Warning signs: get urgent help if') : T('warn_watch', 'Warning signs to watch for'), a.red_flags);

@@ -171,6 +171,12 @@ textarea { resize: vertical; min-height: 130px; line-height: 1.5; }
 .sidebar {
   position: sticky; top: 0; height: 100vh; padding: 1.4rem 1rem; display: flex; flex-direction: column; gap: .3rem;
   background: var(--surface); border-right: 1px solid var(--line);
+  /* Without this, the sidebar's own content (nav items, user chip, language buttons, footer) could exceed 100vh on
+     a short window or with a long username/extra languages, and - because position:sticky pins it to the page's
+     OWN scroll - there would be no way to reach the clipped part at all: not by scrolling the sidebar (nothing was
+     scrollable) and not by scrolling the page (sticky keeps it fixed in place regardless). This makes the sidebar
+     scroll independently, within its own 100vh, while .main below still scrolls normally with the page. */
+  overflow-y: auto; overscroll-behavior: contain;
 }
 .logo { display: flex; align-items: center; gap: .6rem; font: 750 1.3rem var(--font-display); color: var(--ink); text-decoration: none; padding: 0 .6rem 1.1rem; }
 .logo:hover { color: var(--ink); }
@@ -672,6 +678,9 @@ html[lang="kn"] h1, html[lang="kn"] h2, html[lang="kn"] h3 { font-family: inheri
 .status-dot.off { background: var(--line); }
 .row-actions { display: flex; flex-wrap: wrap; gap: .4rem; }
 .row-actions .btn { padding: .3em .7em; font-size: .82rem; }
+.may-indicate { font-size: .95rem; }
+.may-indicate b { font-weight: 650; }
+.matched-from { color: var(--muted); font-size: .92em; font-style: italic; }
 .detail-list { display: grid; grid-template-columns: max-content 1fr; gap: .35rem 1rem; margin: 0 0 1rem; }
 .detail-list dt { font-weight: 600; color: var(--muted); }
 .detail-list dd { margin: 0; }
