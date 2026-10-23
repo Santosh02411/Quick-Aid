@@ -98,8 +98,11 @@ GUIDES: List[Guide] = [
           care='self_care',
           escalations=((_rx(r"\b(?:face|eye|hand|hands|finger|fingers|foot|feet|toe|toes|genital|groin|joint|knuckle|palm|neck|blister|blisters|child|baby|infant|toddler|big|large|oil)\b"), 'soon', 'Burns on the hands, face, feet or joints, with blisters, or in children need a doctor'),
                        (_rx(r"\b(?:white|charred|black|leathery|deep|electric(?:al)?|chemical|acid|bleach|whole|entire|covering|huge|very large|inhaled|smoke)\b"), 'same_day', 'A deep, large, chemical or electrical burn needs urgent care'))),
+    # The negative lookahead also excludes "cut...won't heal"/"isn't healing"/"hasn't healed": that describes a
+    # CHRONIC, concerning sign (possibly worth a doctor visit, e.g. a differential like diabetes - see
+    # symptom_checker.py's slow_wound_healing entry), not a fresh injury needing the immediate first-aid steps below.
     Guide('cut', 'Minor cut or scrape',
-          _rx(r"\b(?:cut(?!\s+(?:down|back|out|off|short|in line))|cuts|scrape[ds]?|graze[ds]?|scratch(?:ed|es)|abrasion|nick(?:ed)?|gash(?:ed)?|small wound|paper cut|minor wound|knife (?:slip|cut)|sliced)\b"),
+          _rx(r"\b(?:cut(?!\s+(?:down|back|out|off|short|in line)|.{0,25}(?:won'?t|wont|isn'?t|hasn'?t|not|never|does(?:n'?t)?)\s+heal)|cuts|scrape[ds]?|graze[ds]?|scratch(?:ed|es)|abrasion|nick(?:ed)?|gash(?:ed)?|small wound|paper cut|minor wound|knife (?:slip|cut)|sliced)\b"),
           'You described a cut, scrape or small wound.', 'Stop the bleeding, clean it well, and cover it.',
           ('Wash your hands, or put on clean gloves if you have them.',
            'Press a clean cloth firmly on the cut for 5 to 10 minutes to stop the bleeding. Raise the injured part above the heart if you can. Do not keep lifting the cloth to look.',

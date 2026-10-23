@@ -63,7 +63,12 @@ DISCLAIMER_RULES = ('Rule-based estimate, not a diagnosis. It cannot examine you
 # ---------------------------------------------------------------------------
 
 _NEGATORS = re.compile(r"\b(no|not|without|never|denies|deny|isn'?t|aren'?t|wasn'?t|weren'?t|don'?t have|doesn'?t have|free of|ruled out)\b")
-_CLAUSE_BREAKS = ('.', ';', '!', '?', ',', ' but ', ' just ', ' only ', ' except ', ' however ', ' although ')
+_CLAUSE_BREAKS = ('.', ';', '!', '?', ',', ' but ', ' just ', ' only ', ' except ', ' however ', ' although ', ' and ')
+# ' and ' matters specifically because it is the most common way people list several separate complaints in one
+# sentence ("X isn't Y and my Z is W") - without it, a negation meant for the first item could silently suppress a
+# real, unrelated symptom named after it. Checked (see TestNegationCrossesAndBoundary below) that this does not
+# break the opposite, correct case where a negation genuinely IS meant to carry across "and" because it is simply
+# restated on each side ("no fever and no cough" still negates both - "no" is repeated, not relied on to carry over).
 
 
 def negated(text: str, start: int) -> bool:
@@ -417,6 +422,12 @@ class Signals:
     urgent: List[str] = field(default_factory=list)
     soon: List[str] = field(default_factory=list)
     crisis: bool = False
+    # label -> the exact text that matched it (e.g. 'Chest pain or pressure' -> 'chest tightness'). Purely additive:
+    # nothing reads this to decide urgency or labels, it exists only so a result can show the person which of
+    # their own words a warning-sign CATEGORY was triggered by - the category name itself ("...or pressure") is a
+    # clinical grouping, not a claim about their literal wording, but showing the actual match makes that visible
+    # rather than leaving the person to wonder why a word they didn't use appears in the label.
+    emergency_matched_text: Dict[str, str] = field(default_factory=dict)
 
     @property
     def any_emergency(self) -> bool:
@@ -435,6 +446,7 @@ def scan(text: Optional[str]) -> Signals:
             if not negated(t, m.start()) and not resolved(t, m.start(), m.end()):
                 if label not in sig.emergency:
                     sig.emergency.append(label)
+                    sig.emergency_matched_text[label] = m.group(0)
                 break
     for label, rx in _URGENT_RE:
         for m in rx.finditer(t):
@@ -477,7 +489,7 @@ CRISIS_SUPPORT = {
 
 GUIDANCE: Dict[str, List[str]] = {
     'Chest pain or pressure': [
-        f'Call {N} now and say you have chest pain.',
+        f'Call {N} now and describe exactly what you are feeling in your chest.',
         'Stop what you are doing, sit down and stay as calm and still as you can.',
         'Loosen tight clothing. If you are alone, unlock the door so help can reach you.',
         'Do not drive yourself. Follow the instructions the emergency operator gives you.'],
@@ -566,8 +578,42 @@ def label_for(label: str, lang: Optional[str] = None) -> str:
     return i18n_emergency.LABELS.get(lang or _lang(), {}).get(label, label)
 
 
-def build_emergency(reasons: List[str], region: str, crisis: bool = False, lang: Optional[str] = None) -> Dict:
-    """Localised emergency guidance: {'reasons', 'headline', 'steps', 'crisis_support'} in the current language (English by default)."""
+# What a warning sign CAN mean, named plainly - requested directly: showing only the warning-sign label ("Chest
+# pain or pressure") without ever naming what it can point to left the guidance reading as a generic catch-all
+# rather than something concrete. Each entry is deliberately HEDGED ("can be a sign of", never "this is" or "you
+# have") and, where a symptom has several common serious causes, lists more than one rather than narrowing to a
+# single guess - the point is to make the warning feel concrete and recognisable, not to diagnose. A label with no
+# entry here (overdose, a bite, an accident, severe bleeding) is already self-explanatory and gets nothing added.
+# English only for now, like the other wording rewrites in this file (see soften()) - translating specific disease
+# names accurately needs the same native-speaker review the rest of the translated content is still waiting for.
+MAY_INDICATE: Dict[str, List[str]] = {
+    'Chest pain or pressure': ['a heart attack'],
+    'Possible stroke signs': ['a stroke'],
+    'Severe allergic reaction': ['anaphylaxis'],
+    'Stiff neck with fever': ['meningitis'],
+    'Fever with confusion': ['meningitis', 'sepsis'],
+    'Loss of consciousness or seizure': ['a seizure', 'a severe drop in blood sugar'],
+    'Severe trouble breathing': ['a severe asthma attack', 'a serious lung or heart problem'],
+    'Worst headache of life': ['a brain bleed'],
+    'Pregnancy with heavy bleeding': ['a serious pregnancy complication'],
+}
+
+
+def may_indicate_for(reasons: List[str]) -> List[str]:
+    """Deduplicated, order-preserving list of what the given warning-sign labels can point to."""
+    seen: Dict[str, None] = {}
+    for label in reasons:
+        for name in MAY_INDICATE.get(label, []):
+            seen.setdefault(name, None)
+    return list(seen)
+
+
+def build_emergency(reasons: List[str], region: str, crisis: bool = False, lang: Optional[str] = None,
+                    matched_text: Optional[Dict[str, str]] = None) -> Dict:
+    """Localised emergency guidance: {'reasons', 'headline', 'steps', 'crisis_support'} in the current language (English by default).
+    `matched_text` (label -> the exact phrase that triggered it, from Signals.emergency_matched_text) is carried
+    through to the result as 'matched_text' so a warning-sign CATEGORY (e.g. "Chest pain or pressure", which covers
+    several related words) can be shown alongside the person's own wording, not instead of it."""
     lang = lang or _lang()
     translated = lang in i18n_emergency.LANGS
     steps: List[str] = []
@@ -593,14 +639,17 @@ def build_emergency(reasons: List[str], region: str, crisis: bool = False, lang:
     shown = list(reasons) + (['Thoughts of self-harm'] if crisis and not reasons else [])
     return {'reasons': [label_for(r, lang) for r in shown] if translated else shown,
             'headline': i18n_emergency.TEXT[lang]['headline'] if translated else 'This could be an emergency',
-            'steps': [localize_text(s, region) for s in steps], 'crisis_support': support}
+            'steps': [localize_text(s, region) for s in steps], 'crisis_support': support,
+            'may_indicate': may_indicate_for(reasons) if lang == 'en' else [],
+            'matched_text': {r: matched_text[r] for r in reasons if matched_text and matched_text.get(r)}}
 
 
-def emergency_analysis(reasons: List[str], region: str, crisis: bool, summary: str, kind: str = 'symptom') -> Dict:
+def emergency_analysis(reasons: List[str], region: str, crisis: bool, summary: str, kind: str = 'symptom',
+                       matched_text: Optional[Dict[str, str]] = None) -> Dict:
     """Immediate-guidance result shaped like a normal analysis, so it renders and saves like one."""
     lang = _lang()
     tx = i18n_emergency.TEXT.get(lang)
-    info = build_emergency(reasons, region, crisis, lang)
+    info = build_emergency(reasons, region, crisis, lang, matched_text=matched_text)
     recs = list(info['steps'])
     if info['crisis_support']:
         recs.insert(0, info['crisis_support'])
@@ -609,7 +658,8 @@ def emergency_analysis(reasons: List[str], region: str, crisis: bool, summary: s
         'reported': {'symptoms': [], 'details': []},
         'urgency_level': 'high', 'care_level': 'emergency', 'timeframe': tx['timeframe'] if tx else 'Right now',
         'emergency_alert': {'alert': True, 'message': emergency_message(lang), 'action': emergency_action(region, lang),
-                            'reason': '; '.join(info['reasons'])},
+                            'reason': '; '.join(info['reasons']), 'may_indicate': info.get('may_indicate', []),
+                            'matched_text': info.get('matched_text', {})},
         'red_flags_present': info['reasons'], 'red_flags': info['reasons'],
         'recommendations': recs, 'avoid': list(tx['avoid']) if tx else ['Do not wait to see whether it gets better', 'Do not drive yourself'],
         'see_doctor_when': [], 'information_gaps': [], 'safety_tips': [],
@@ -630,7 +680,7 @@ def immediate_emergency(text: str, region: str, summary: str) -> Optional[Dict]:
     """If the text contains an emergency or self-harm signal, return ready-made guidance; else None."""
     sig = scan(text)
     if sig.any_emergency:
-        result = emergency_analysis(sig.emergency, region, sig.crisis, summary)
+        result = emergency_analysis(sig.emergency, region, sig.crisis, summary, matched_text=sig.emergency_matched_text)
         from quickaid.ai import first_aid                    # a specific guide (choking) outranks the generic guidance for the label it overlaps with
         emergency_guides = [g for g in first_aid.match(text) if g.care_for(text)[0] == 'emergency']
         if emergency_guides and _lang() == 'en':
@@ -1037,9 +1087,18 @@ class TriageEngine:
         if d['emergency']:
             reasons = sig.emergency or [f.reason for f in floors if f.emergency][:2] or ([alert['reason']] if alert.get('reason') else [])
             labels = [x for x in reasons if x in GUIDANCE]
-            info = build_emergency(labels or [], region, crisis=sig.crisis)
+            info = build_emergency(labels or [], region, crisis=sig.crisis, matched_text=sig.emergency_matched_text)
             alert.update({'alert': True, 'message': emergency_message(), 'action': emergency_action(region)})
             alert['reason'] = alert.get('reason') or '; '.join(reasons or info['reasons'])
+            # sig.emergency (the text scan's own labels) is used here rather than `labels` above: `reasons` can fall
+            # back to a label the BASIC analyzer already set on its own (e.g. from its separate keyword list), which
+            # does not always match a GUIDANCE key exactly, so `labels` can come back empty even when the text
+            # clearly matched a specific warning sign and a may-indicate entry exists for it.
+            may_indicate = may_indicate_for(sig.emergency) or may_indicate_for(labels)
+            if may_indicate:
+                alert['may_indicate'] = list(dict.fromkeys((alert.get('may_indicate') or []) + may_indicate))
+            if info.get('matched_text'):
+                alert['matched_text'] = dict((alert.get('matched_text') or {}), **info['matched_text'])
             # Show WHICH warning sign the safety rules found, in the person's language, even when the model did not list it itself.
             r['red_flags_present'] = list(dict.fromkeys(list(r.get('red_flags_present') or []) + [label_for(x) for x in reasons]))
             generic = info['steps']
