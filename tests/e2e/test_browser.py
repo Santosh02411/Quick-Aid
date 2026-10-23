@@ -228,6 +228,47 @@ def audit(page, axe_source):
     return [v for v in result if v['impact'] in ('serious', 'critical')]
 
 
+class TestEmergencyResultNamesWhatItCanIndicate:
+    """Requested directly: the emergency result only ever showed the warning-sign label ("Chest pain or
+    pressure"), never named anything concrete - now shown alongside it, hedged ("can be a sign of")."""
+
+    def test_the_rendered_result_names_the_likely_condition(self, live, make_page):
+        page = make_page()
+        sign_up(page, live, name='mayindicatetest')
+        page.fill('#symptomsInput', 'severe crushing chest pain and sweating, started 20 minutes ago')
+        page.click('#checkSymptomsBtn')
+        page.wait_for_selector('#symptomResult.on', timeout=10000)
+        text = page.locator('#symptomResult').inner_text()
+        assert 'can be a sign of' in text.lower() and 'heart attack' in text.lower()
+        assert page.js_errors == []
+
+
+class TestSidebarScrollsIndependentlyOfThePage:
+    """Found by a real user on a short window: the sidebar had height:100vh with no overflow-y, so if its own
+    content (nav items, user chip, language buttons, footer) was taller than the viewport, the extra content was
+    silently clipped with NO way to reach it - not by scrolling the sidebar (nothing was scrollable) and not by
+    scrolling the page (position:sticky keeps the sidebar fixed in place regardless of page scroll)."""
+
+    def test_the_sidebar_scrolls_on_its_own_without_moving_the_page(self, live, make_page):
+        page = make_page(width=1280, height=420)   # short enough that the sidebar's own content overflows
+        sign_up(page, live, name='sidebarscrolltest')
+        info = page.evaluate("""() => {
+            const el = document.querySelector('.sidebar');
+            const cs = getComputedStyle(el);
+            return {overflowY: cs.overflowY, overflows: el.scrollHeight > el.clientHeight};
+        }""")
+        assert info['overflows'] is True, 'test setup: the viewport must be short enough to force real overflow'
+        assert info['overflowY'] == 'auto'
+
+        page.evaluate("document.querySelector('.sidebar').scrollTop = 150")
+        page.wait_for_timeout(50)
+        assert page.evaluate("window.scrollY") == 0   # scrolling the sidebar must not move the page
+
+        page.evaluate("window.scrollTo(0, 250)")
+        page.wait_for_timeout(50)
+        assert page.evaluate("document.querySelector('.sidebar').scrollTop") == 150   # and vice versa
+
+
 class TestAccessibility:
     @pytest.mark.parametrize('scheme', ['light', 'dark'])
     @pytest.mark.parametrize('width,height', VIEWPORTS)

@@ -251,7 +251,7 @@ class TestTranslatedEmergencyResults:
     def test_english_output_is_byte_for_byte_what_it_was(self):
         r = te.immediate_emergency('crushing chest pain', 'IN', 'summary text')
         assert r['summary'] == 'summary text' and r['emergency_alert']['action'] == 'Call 112 or go to the nearest emergency room immediately'
-        assert r['recommendations'][0] == 'Call 112 now and say you have chest pain.' and r['timeframe'] == 'Right now'
+        assert r['recommendations'][0] == 'Call 112 now and describe exactly what you are feeling in your chest.' and r['timeframe'] == 'Right now'
 
     def test_an_unknown_language_falls_back_to_english(self):
         tok = i18n.set_language('fr')

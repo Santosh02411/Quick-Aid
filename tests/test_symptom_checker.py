@@ -38,7 +38,13 @@ class TestExtractSymptoms:
 
     def test_chest_pain_variations(self, checker):
         assert 'chest_pain' in checker._extract_symptoms("my chest hurts")
-        assert 'chest_pain' in checker._extract_symptoms("chest tightness all day")
+
+    def test_chest_tightness_is_a_distinct_key_from_chest_pain(self, checker):
+        # "tightness" is a genuinely different (if related) description from "pain" - conflating them under one
+        # key meant someone who said "tightness" was told the system detected "pain", a symptom they never
+        # reported (see symptom_checker.py's chest_tightness entry and _extract_symptoms_detailed for why).
+        keys = checker._extract_symptoms("chest tightness all day")
+        assert 'chest_tightness' in keys and 'chest_pain' not in keys
 
     def test_no_recognizable_symptoms(self, checker):
         result = checker._extract_symptoms("i feel weird about my homework")

@@ -26,18 +26,27 @@ class TestTheReportedCase:
 
 
 class TestEachSymptomIsRecognisedOnItsOwn:
-    @pytest.mark.parametrize('text,symptom', [
-        ("I'm always thirsty and can't stop drinking water", 'increased thirst'),
-        ("I've been urinating a lot more than usual", 'frequent urination'),
-        ("I'm constantly hungry even after eating", 'increased hunger'),
-        ("my vision has been blurry for a few days", 'blurred vision'),
-        ("this cut on my hand just won't heal", 'slow wound healing'),
-        ("I've lost weight without trying or dieting", 'unexplained weight loss'),
+    """Checks the symptom KEY (via _extract_symptoms) is recognised, not the exact display text: detected_symptoms
+    now shows the person's own words (see _extract_symptoms_detailed), which legitimately vary by phrasing -
+    'I'm always thirsty' is correctly shown as "always thirsty", not the category name "increased thirst"."""
+
+    @pytest.mark.parametrize('text,key', [
+        ("I'm always thirsty and can't stop drinking water", 'increased_thirst'),
+        ("I've been urinating a lot more than usual", 'frequent_urination'),
+        ("I'm constantly hungry even after eating", 'increased_hunger'),
+        ("my vision has been blurry for a few days", 'blurred_vision'),
+        ("this cut on my hand just won't heal", 'slow_wound_healing'),
+        ("I've lost weight without trying or dieting", 'unexplained_weight_loss'),
     ])
-    def test_each_symptom_is_recognised_in_isolation(self, checker, text, symptom):
+    def test_each_symptom_is_recognised_in_isolation(self, checker, text, key):
+        assert key in checker._extract_symptoms(text)
         r = checker.analyze_symptoms(text)
-        assert symptom in r['detected_symptoms'], (text, r['detected_symptoms'])
         assert 'diabetes' in r['possible_conditions']
+
+    def test_detected_symptoms_shows_the_persons_own_words_not_a_category_name(self, checker):
+        r = checker.analyze_symptoms("I'm always thirsty and can't stop drinking water")
+        assert 'increased thirst' not in r['detected_symptoms']   # the category name must not appear verbatim
+        assert any('thirsty' in s or 'drinking' in s for s in r['detected_symptoms'])
 
 
 class TestDiabetesOnlyRisesWithMultipleSymptoms:
@@ -77,9 +86,10 @@ class TestChronicNonHealingWoundIsNotTreatedAsAFreshInjury:
         assert not first_aid.match(text)
 
     def test_a_cut_that_wont_heal_reaches_the_symptom_checker_instead(self, checker):
-        r = checker.analyze_symptoms("I have a cut that isn't healing and my vision has been blurry")
-        assert 'slow wound healing' in r['detected_symptoms']
-        assert 'blurred vision' in r['detected_symptoms']
+        text = "I have a cut that isn't healing and my vision has been blurry"
+        keys = checker._extract_symptoms(text)
+        assert 'slow_wound_healing' in keys and 'blurred_vision' in keys
+        r = checker.analyze_symptoms(text)
         assert 'diabetes' in r['possible_conditions']
 
 
