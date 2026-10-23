@@ -41,6 +41,13 @@ MAX_IMAGE_SIDE = 1568  # px; plenty of detail for Gemini, keeps latency/cost dow
 DISCLAIMER_AI = 'AI analysis for educational purposes only. It is not a diagnosis, cannot examine you and can be wrong. Consult a healthcare professional.'
 DISCLAIMER_BASIC = ('Basic colour analysis only, not a diagnosis. Connect a Gemini API key for much more accurate results, '
                     'and consult a healthcare professional.')
+# Shown instead of DISCLAIMER_BASIC specifically when a Gemini key WAS configured and a call was genuinely
+# attempted, but it failed (timeout, server error, rate limit) - telling the person "connect a Gemini API key" at
+# that point is actively wrong: they already have one connected, it just did not come back in time this once. The
+# honest message is "the AI call failed, here is the basic result instead", not "you have not set anything up".
+DISCLAIMER_BASIC_AI_FAILED = ('The AI analysis could not complete this time (a temporary problem, not a diagnosis). '
+                              'Showing a basic colour analysis instead - not a diagnosis either. Try again shortly, '
+                              'or consult a healthcare professional.')
 
 LEVELS = ('low', 'medium', 'high')
 
@@ -176,7 +183,7 @@ class MedicalAnalyzer:
         except Exception:
             logger.warning("Gemini image analysis failed for %s - falling back to basic analysis",
                            image_path, exc_info=True)
-            return self._analyze_basic(image_path)
+            return self._analyze_basic(image_path, ai_attempted=True)
 
     def _parse_gemini_response(self, response, quality: Dict = None) -> Dict:
         """Validate the model answer, convert it, and have the triage engine review it.
@@ -205,8 +212,13 @@ class MedicalAnalyzer:
 
     # ------------------------------------------------------------------ basic fallback
 
-    def _analyze_basic(self, image_path: str, image: Image.Image = None, quality: Dict = None) -> Dict:
-        """Colour-region heuristic used when Gemini is unavailable."""
+    def _analyze_basic(self, image_path: str, image: Image.Image = None, quality: Dict = None, ai_attempted: bool = False) -> Dict:
+        """Colour-region heuristic used when Gemini is unavailable.
+
+        `ai_attempted` distinguishes two genuinely different situations that both land here: no key configured at
+        all (ai_attempted=False, the default - correct to tell the person to connect one), versus a key that IS
+        configured and WAS called, but the call itself failed (ai_attempted=True - telling them to "connect a key"
+        at that point would be wrong, since they already have."""
         im = image or self._prepare_image(image_path)
         quality = quality or image_quality.assess(im)
         features = self._analyze_visual_features(np.array(im))
@@ -248,7 +260,9 @@ class MedicalAnalyzer:
             'see_doctor_when': ['The area is getting bigger, more painful, warm, or has pus or a bad smell',
                                 'You have a fever, or you are unsure how serious this is'],
             'safety_tips': self._get_safety_tips(),
-            'analysis_mode': 'basic', 'disclaimer': DISCLAIMER_BASIC, 'interpretation_available': False,
+            'analysis_mode': 'basic', 'ai_attempted': ai_attempted,
+            'disclaimer': DISCLAIMER_BASIC_AI_FAILED if ai_attempted else DISCLAIMER_BASIC,
+            'interpretation_available': False,
         }
         data['red_flags'] = []
         return triage.review_image(data, region=get_app_region(), quality=quality, mode='basic')

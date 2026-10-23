@@ -40,6 +40,9 @@ logger = get_logger('interview')
 MAX_QUESTIONS = 8
 MAX_TEXT_ANSWER = 300
 DISCLAIMER_AI = triage_engine.DISCLAIMER_AI
+DISCLAIMER_BASIC_AI_FAILED = ('The AI assessment could not complete this time (a temporary problem, not a diagnosis). '
+                              'Showing a rule-based assessment from your answers instead - not a diagnosis either. '
+                              'Try again shortly, or consult a healthcare professional.')
 DISCLAIMER_BASIC = ('Rule-based assessment from your answers, not a diagnosis. Add a Gemini API key for a more detailed assessment, '
                     'and always consult a healthcare professional.')
 
@@ -554,6 +557,10 @@ class InterviewEngine:
             result = self._assess_with_gemini(state, qa, region)
             if result:
                 return self._finalize(result, state, qa, region, 'ai')
+            # A key IS configured and a call WAS made - it just did not come back usable. _assess_basic's own
+            # ai_attempted=True flag is what lets the result say so honestly, instead of "add a Gemini API key"
+            # when one is already connected (see DISCLAIMER_BASIC_AI_FAILED).
+            return self._finalize(self._assess_basic(state, region, ai_attempted=True), state, qa, region, 'basic')
         return self._finalize(self._assess_basic(state, region), state, qa, region, 'basic')
 
     def _transcript(self, state: Dict, qa: List[Dict]) -> str:
@@ -591,7 +598,7 @@ class InterviewEngine:
                     break
         return None
 
-    def _assess_basic(self, state: Dict, region: str) -> Dict:
+    def _assess_basic(self, state: Dict, region: str, ai_attempted: bool = False) -> Dict:
         ck = self.checker
         symptoms = list(state['detected'])
         for label in state['ctx']['selected']:
@@ -633,7 +640,8 @@ class InterviewEngine:
             'avoid': ['Do not rely on this alone, and do not start or stop prescribed medicine without medical advice'],
             'see_doctor_when': ['It lasts longer than expected, keeps getting worse, or you are unsure how serious it is'],
             'safety_tips': [localize_text(t, region) for t in ck._get_symptom_safety_tips()],
-            'analysis_mode': 'basic', 'disclaimer': DISCLAIMER_BASIC,
+            'analysis_mode': 'basic', 'ai_attempted': ai_attempted,
+            'disclaimer': DISCLAIMER_BASIC_AI_FAILED if ai_attempted else DISCLAIMER_BASIC,
         }
         guide_text = ' '.join([state['text']] + list(state['ctx'].get('selected', [])))
         first_aid.apply(out, first_aid.match(guide_text), guide_text, lambda s: localize_text(s, region))

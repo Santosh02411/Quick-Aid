@@ -36,6 +36,12 @@ logger = get_logger('symptom_checker')
 DISCLAIMER_AI = triage_engine.DISCLAIMER_AI
 DISCLAIMER_BASIC = ('Basic keyword analysis only, not a diagnosis. Add a Gemini API key for much more accurate results, '
                     'and consult a healthcare professional.')
+# Shown instead of DISCLAIMER_BASIC specifically when a Gemini key WAS configured and a call was genuinely
+# attempted, but it failed (timeout, server error, invalid response) - "add a Gemini API key" is actively wrong at
+# that point, since one is already connected and was used. See medical_analyzer.py's identical distinction.
+DISCLAIMER_BASIC_AI_FAILED = ('The AI analysis could not complete this time (a temporary problem, not a diagnosis). '
+                              'Showing a basic keyword analysis instead - not a diagnosis either. Try again shortly, '
+                              'or consult a healthcare professional.')
 
 # The schema Gemini answers in (also used to validate what comes back).
 SymptomAnalysisResult = SymptomAssessment
@@ -451,7 +457,7 @@ class SymptomChecker:
                     break
 
         logger.warning("Gemini symptom analysis failed - falling back to basic analysis", exc_info=last_error)
-        return self._analyze_basic_symptoms(symptom_text)
+        return self._analyze_basic_symptoms(symptom_text, ai_attempted=True)
 
     def _assessment_to_dict(self, a: SymptomAssessment, region: str = None) -> Dict:
         """A validated model answer -> our standard result dict (before safety review)."""
@@ -507,7 +513,8 @@ class SymptomChecker:
             'avoid': [], 'see_doctor_when': ['Symptoms are getting worse or you are worried'],
             'information_gaps': ['The AI response could not be validated.'],
             'emergency_alert': {'alert': False, 'message': '', 'action': '', 'reason': ''},
-            'safety_tips': self._get_symptom_safety_tips(), 'analysis_mode': 'basic', 'disclaimer': DISCLAIMER_BASIC,
+            'safety_tips': self._get_symptom_safety_tips(), 'analysis_mode': 'basic', 'ai_attempted': True,
+            'disclaimer': DISCLAIMER_BASIC_AI_FAILED,
         }
 
     def _apply_safety_net(self, result: Dict, raw_text: str, mode: str = None) -> Dict:
@@ -531,8 +538,12 @@ class SymptomChecker:
 
     # ------------------------------------------------------------------ basic fallback
 
-    def _analyze_basic_symptoms(self, symptom_text: str) -> Dict:
-        """Fallback keyword analysis (used without a Gemini key, or if Gemini fails)."""
+    def _analyze_basic_symptoms(self, symptom_text: str, ai_attempted: bool = False) -> Dict:
+        """Fallback keyword analysis (used without a Gemini key, or if Gemini fails).
+
+        `ai_attempted` distinguishes two different situations: no key configured at all (default False - correct
+        to tell the person to add one), versus a key that IS configured and WAS called, but the call failed
+        (True - telling them to "add a Gemini API key" then would be wrong, since one is already connected)."""
         region = get_app_region()
         detailed = self._extract_symptoms_detailed(symptom_text.lower())
         symptoms = [key for key, _ in detailed]
@@ -549,7 +560,8 @@ class SymptomChecker:
                 'recommendations': ['Please describe what is wrong a little more: what it is, where on the body, and how long it has been going on',
                                     localize_text('This basic check cannot recognise every description or language. If this might be an emergency, call {EMERGENCY_NUMBER} now.', region),
                                     'If you are worried, see a doctor rather than waiting'],
-                'disclaimer': DISCLAIMER_BASIC
+                'ai_attempted': ai_attempted,
+                'disclaimer': DISCLAIMER_BASIC_AI_FAILED if ai_attempted else DISCLAIMER_BASIC,
             }
 
         if symptoms:
@@ -597,8 +609,8 @@ class SymptomChecker:
             'avoid': ['Do not rely on this result alone, and do not start or stop prescribed medicine without medical advice'],
             'see_doctor_when': ['Symptoms last more than 3 days, keep getting worse, or you are unsure how serious they are'],
             'safety_tips': [str(t) for t in self._get_symptom_safety_tips()],
-            'analysis_mode': 'basic',
-            'disclaimer': DISCLAIMER_BASIC,
+            'analysis_mode': 'basic', 'ai_attempted': ai_attempted,
+            'disclaimer': DISCLAIMER_BASIC_AI_FAILED if ai_attempted else DISCLAIMER_BASIC,
         }
         first_aid.apply(result, guides, symptom_text, lambda s: localize_text(s, region))    # injuries and first-aid situations: what to DO comes first
         return self._apply_safety_net(result, symptom_text, mode='basic')
