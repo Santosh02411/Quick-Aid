@@ -399,7 +399,14 @@
     }
 
     if (a.analysis_mode === 'basic') {
-      nodes.push(h('div', { class: 'alert alert-warn', text: T('basic_notice', 'AI is not connected, so this is only a basic rule-based check. It can miss serious problems, especially if symptoms are described in unusual words or another language. If you are worried, do not wait: call {n} or see a doctor.', { n: emergencyNumber }) }));
+      // a.ai_attempted distinguishes "no key configured" from "a key IS configured and was used, but that
+      // specific call failed (timeout, server error, invalid response)" - telling someone who has AI connected
+      // that it "is not connected" is actively wrong and confusing; see medical_analyzer.py / symptom_checker.py.
+      if (a.ai_attempted) {
+        nodes.push(h('div', { class: 'alert alert-warn', text: T('basic_notice_ai_failed', 'The AI analysis could not complete this time (a temporary problem), so this is a basic rule-based check instead. It can miss serious problems, especially if symptoms are described in unusual words or another language. If you are worried, do not wait: call {n} or see a doctor, or try again shortly.', { n: emergencyNumber }) }));
+      } else {
+        nodes.push(h('div', { class: 'alert alert-warn', text: T('basic_notice', 'AI is not connected, so this is only a basic rule-based check. It can miss serious problems, especially if symptoms are described in unusual words or another language. If you are worried, do not wait: call {n} or see a doctor.', { n: emergencyNumber }) }));
+      }
       if (AI.available && !AI.allowed) nodes.push(h('div', { class: 'alert alert-info', role: 'note' }, T('ai_off_notice', 'You are seeing the simple built-in check because AI analysis is turned off. Turn it on for a more detailed result.') + ' ',
         h('button', { type: 'button', class: 'btn btn-sm', 'data-ai-consent': 'true', 'data-reload': '1' }, T('ai_turn_on', 'Turn on AI analysis'))));
       if (LANG !== 'en' && !(a.emergency_alert && a.emergency_alert.alert)) nodes.push(h('div', { class: 'alert alert-warn', text: T('basic_english_only', '') }));
